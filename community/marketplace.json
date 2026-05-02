@@ -1,1 +1,14 @@
-
+{
+    "marketplace": [
+        {
+            "name": "Nazwa Programu 1",
+            "description": "Krótki opis możliwości programu numer jeden.",
+            "download": "https://przyklad.pl/pobierz/program1.hk"
+        },
+        {
+            "name": "Nazwa Programu 2",
+            "description": "Krótki opis możliwości programu numer dwa.",
+            "download": "https://przyklad.pl/pobierz/program2.hk"
+        }
+    ]
+}
