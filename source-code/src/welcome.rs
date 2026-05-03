@@ -30,9 +30,9 @@ impl WelcomeItem {
             WelcomeItem::Settings     => " Settings          Ctrl+,".to_string(),
             WelcomeItem::RecentFile(p) => {
                 let name = std::path::Path::new(p)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(p);
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(p);
                 format!(" {}", name)
             }
         }
@@ -43,7 +43,7 @@ impl WelcomeItem {
             WelcomeItem::OpenFolder   => "⊞",
             WelcomeItem::Terminal     => "❯",
             WelcomeItem::Marketplace  => "◎",
-            WelcomeItem::Settings     => "⚙",
+            WelcomeItem::Settings     => "*",
             WelcomeItem::RecentFile(_)=> "◷",
         }
     }
