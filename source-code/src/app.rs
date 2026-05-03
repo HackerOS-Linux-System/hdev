@@ -10,6 +10,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
+use crate::autocomplete::{Autocomplete, extract_words};
 use crate::config::{HdevConfig, SessionData};
 use crate::editor::EditorBuffer;
 use crate::filetree::FileTree;
@@ -73,6 +74,7 @@ pub struct App {
     pub show_help:           bool,
     pub show_confirm_delete: bool,
     pub settings_selected:   usize,
+    pub autocomplete:        Autocomplete,
     pub quit:                bool,
 }
 
@@ -127,6 +129,10 @@ impl App {
             terminal.restore_history(&session.terminal_history);
         }
 
+        // Załaduj listę zainstalowanych pluginów z config do marketplace
+        let mut marketplace = Marketplace::new();
+        marketplace.installed = config.installed_plugins.clone();
+
         Ok(Self {
             screen,
             prev_screen: PrevScreen::Editor,
@@ -135,13 +141,13 @@ impl App {
             active_buffer: 0,
             file_tree,
             terminal,
-            marketplace: Marketplace::new(),
-           plugins,
-           welcome,
-           show_terminal: false,
-           focus_terminal: false,
-           input_mode: InputMode::Normal,
-           dialog_input: String::new(),
+            marketplace,
+            plugins,
+            welcome,
+            show_terminal: false,
+            focus_terminal: false,
+            input_mode: InputMode::Normal,
+            dialog_input: String::new(),
            status_msg: String::new(),
            status_kind: StatusKind::Info,
            status_time: Instant::now(),
@@ -149,7 +155,12 @@ impl App {
            show_confirm_delete: false,
            settings_selected: 0,
            quit: false,
-           config,
+           config: config.clone(),
+           autocomplete: {
+               let mut ac = Autocomplete::new();
+               ac.enabled = config.autocomplete_enabled;
+               ac
+           },
         })
     }
 
@@ -332,6 +343,9 @@ impl App {
             WelcomeAction::OpenMarketplace => {
                 self.prev_screen = PrevScreen::Welcome;
                 self.screen = AppScreen::Marketplace;
+                if !self.marketplace.loaded {
+                    self.marketplace.load_from_url();
+                }
             }
             WelcomeAction::OpenSettings => {
                 self.prev_screen = PrevScreen::Welcome;
@@ -382,6 +396,9 @@ impl App {
                 KeyCode::Char('m') => {
                     self.prev_screen = PrevScreen::Editor;
                     self.screen = AppScreen::Marketplace;
+                    if !self.marketplace.loaded {
+                        self.marketplace.load_from_url();
+                    }
                     return;
                 }
                 KeyCode::Char(',') => {
@@ -430,15 +447,54 @@ impl App {
 
         let action = map_key(key);
         match action {
-            Action::InsertChar(c)   => { if let Some(b) = self.current_buffer_mut() { b.insert_char(c); self.auto_pair_close(c); self.scroll_buf(); } }
+            Action::InsertChar(c)   => {
+                if let Some(b) = self.current_buffer_mut() {
+                    b.insert_char(c);
+                    self.auto_pair_close(c);
+                    self.scroll_buf();
+                }
+                self.refresh_autocomplete();
+            }
             Action::InsertNewline   => { if let Some(b) = self.current_buffer_mut() { b.insert_newline(); self.scroll_buf(); } }
-            Action::InsertTab       => { if let Some(b) = self.current_buffer_mut() { b.insert_tab(); self.scroll_buf(); } }
-            Action::DeleteBackward  => { if let Some(b) = self.current_buffer_mut() { b.delete_char_before(); self.scroll_buf(); } }
+            Action::InsertTab       => {
+                // Tab: najpierw spróbuj autocomplete, dopiero potem wstaw wcięcie
+                if self.autocomplete.visible {
+                    if let Some(suffix) = self.autocomplete.accept() {
+                        if let Some(b) = self.current_buffer_mut() {
+                            for c in suffix.chars() {
+                                b.insert_char(c);
+                            }
+                            self.scroll_buf();
+                        }
+                    }
+                } else {
+                    if let Some(b) = self.current_buffer_mut() { b.insert_tab(); self.scroll_buf(); }
+                }
+            }
+            Action::DeleteBackward  => {
+                if let Some(b) = self.current_buffer_mut() {
+                    b.delete_char_before();
+                    self.scroll_buf();
+                }
+                self.refresh_autocomplete();
+            }
             Action::DeleteForward   => { if let Some(b) = self.current_buffer_mut() { b.delete_char_at(); self.scroll_buf(); } }
             Action::DeleteLine      => { if let Some(b) = self.current_buffer_mut() { b.delete_line(); self.scroll_buf(); } }
             Action::DuplicateLine   => { if let Some(b) = self.current_buffer_mut() { b.duplicate_line(); self.scroll_buf(); } }
-            Action::CursorUp        => { if let Some(b) = self.current_buffer_mut() { b.move_cursor_up();    self.scroll_buf(); } }
-            Action::CursorDown      => { if let Some(b) = self.current_buffer_mut() { b.move_cursor_down();  self.scroll_buf(); } }
+            Action::CursorUp        => {
+                if self.autocomplete.visible {
+                    self.autocomplete.select_prev();
+                } else if let Some(b) = self.current_buffer_mut() {
+                    b.move_cursor_up(); self.scroll_buf();
+                }
+            }
+            Action::CursorDown      => {
+                if self.autocomplete.visible {
+                    self.autocomplete.select_next();
+                } else if let Some(b) = self.current_buffer_mut() {
+                    b.move_cursor_down(); self.scroll_buf();
+                }
+            }
             Action::CursorLeft      => { if let Some(b) = self.current_buffer_mut() { b.move_cursor_left();  self.scroll_buf(); } }
             Action::CursorRight     => { if let Some(b) = self.current_buffer_mut() { b.move_cursor_right(); self.scroll_buf(); } }
             Action::CursorLineStart => { if let Some(b) = self.current_buffer_mut() { b.move_cursor_line_start(); } }
@@ -460,8 +516,9 @@ impl App {
                 self.dialog_input.clear();
             }
             Action::Escape => {
-                // Esc NIE zmienia katalogu / ekranu — tylko zamyka drobne stany
-                if self.show_terminal && self.focus_terminal {
+                if self.autocomplete.visible {
+                    self.autocomplete.close();
+                } else if self.focus_terminal {
                     self.focus_terminal = false;
                 } else if self.show_terminal {
                     self.toggle_terminal();
@@ -654,9 +711,28 @@ impl App {
         match key.code {
             KeyCode::Up      => self.marketplace.move_up(),
             KeyCode::Down    => self.marketplace.move_down(),
-            KeyCode::Enter   => self.marketplace.toggle_install(),
+            KeyCode::Enter   => {
+                match self.marketplace.install_selected() {
+                    Ok(msg) => {
+                        // Zapisz listę zainstalowanych do config
+                        self.config.installed_plugins = self.marketplace.installed.clone();
+                        let _ = self.config.save();
+                        self.set_status(&msg, StatusKind::Ok);
+                    }
+                    Err(e) => self.set_status(&e, StatusKind::Error),
+                }
+            }
             KeyCode::Tab     => self.marketplace.next_tab(),
             KeyCode::BackTab => self.marketplace.prev_tab(),
+            KeyCode::Char(c) => {
+                // Wpisywanie filtru
+                self.marketplace.filter.push(c);
+                self.marketplace.selected = 0;
+            }
+            KeyCode::Backspace => {
+                self.marketplace.filter.pop();
+                self.marketplace.selected = 0;
+            }
             KeyCode::Esc     => self.return_from_overlay(),
             _ => {}
         }
@@ -721,6 +797,15 @@ impl App {
                 if delta > 0 { self.config.next_language(); } else { self.config.prev_language(); }
                 self.set_status(&format!("Język: {}", self.config.default_language_override), StatusKind::Info);
             }
+            7 => { // Autocomplete
+                self.config.autocomplete_enabled = !self.config.autocomplete_enabled;
+                self.autocomplete.enabled = self.config.autocomplete_enabled;
+                if !self.config.autocomplete_enabled { self.autocomplete.close(); }
+                self.set_status(
+                    &format!("Autocomplete: {}", if self.config.autocomplete_enabled { "włączone" } else { "wyłączone" }),
+                                StatusKind::Info
+                );
+            }
             _ => {}
         }
     }
@@ -733,7 +818,10 @@ impl App {
     fn cmd_new_file(&mut self) {
         self.input_mode = InputMode::NewFileName;
         self.dialog_input.clear();
-        self.set_status("Podaj nazwę pliku:", StatusKind::Info);
+        // Pokaż aktualny katalog docelowy
+        let target_dir = self.file_tree.selected_dir_path()
+        .unwrap_or_else(|| self.file_tree.root.clone().unwrap_or_default());
+        self.set_status(&format!("Nowy plik w: {}  (wpisz nazwę)", target_dir.display()), StatusKind::Info);
     }
 
     fn cmd_save(&mut self) {
@@ -759,8 +847,11 @@ impl App {
 
     fn cmd_open_path(&mut self) {
         self.input_mode = InputMode::OpenPath;
-        self.dialog_input.clear();
-        self.set_status("Otwórz plik lub folder:", StatusKind::Info);
+        // Wstaw aktualny katalog jako domyślny
+        let cwd = self.file_tree.root.clone()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        self.dialog_input = cwd.to_string_lossy().to_string();
+        self.set_status("Otwórz plik lub folder (edytuj ścieżkę, Enter potwierdź):", StatusKind::Info);
     }
 
     fn cmd_delete_file(&mut self) {
@@ -800,6 +891,19 @@ impl App {
         if let Some(buf) = self.current_buffer_mut() {
             buf.scroll_to_cursor(40, 100);
         }
+    }
+
+    fn refresh_autocomplete(&mut self) {
+        if !self.autocomplete.enabled { return; }
+        let (line, col, lang, words) = if let Some(buf) = self.current_buffer() {
+            let row = buf.cursor_row;
+            let line = buf.lines.get(row).cloned().unwrap_or_default();
+            let col  = buf.cursor_col;
+            let lang = buf.language.clone();
+            let words = extract_words(&buf.lines);
+            (line, col, lang, words)
+        } else { return; };
+        self.autocomplete.update(&line, col, &lang, &words);
     }
 
     fn auto_pair_close(&mut self, c: char) {
