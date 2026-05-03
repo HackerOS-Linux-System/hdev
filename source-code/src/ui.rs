@@ -40,7 +40,7 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Fill background
     f.render_widget(
         Block::default().style(Style::default().bg(BG)),
-                    size,
+        size,
     );
 
     match &app.screen {
@@ -52,43 +52,43 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Overlays
     if app.input_mode == InputMode::NewFileName ||
-        app.input_mode == InputMode::SaveAs ||
-        app.input_mode == InputMode::OpenPath {
-            draw_input_dialog(f, size, app);
-        }
-        if app.input_mode == InputMode::Search {
-            draw_search_bar(f, size, app);
-        }
-        if app.input_mode == InputMode::Command {
-            draw_command_bar(f, size, app);
-        }
-        if app.show_help {
-            draw_help_overlay(f, size);
-        }
-        if app.screen == AppScreen::Editor && app.autocomplete.visible && !app.focus_terminal {
-            draw_autocomplete(f, size, app);
-        }
-        if app.show_confirm_delete {
-            draw_confirm_dialog(f, size, app);
-        }
+       app.input_mode == InputMode::SaveAs ||
+       app.input_mode == InputMode::OpenPath {
+        draw_input_dialog(f, size, app);
+    }
+    if app.input_mode == InputMode::Search {
+        draw_search_bar(f, size, app);
+    }
+    if app.input_mode == InputMode::Command {
+        draw_command_bar(f, size, app);
+    }
+    if app.show_help {
+        draw_help_overlay(f, size);
+    }
+    if app.screen == AppScreen::Editor && app.autocomplete.visible && !app.focus_terminal {
+        draw_autocomplete(f, size, app);
+    }
+    if app.show_confirm_delete {
+        draw_confirm_dialog(f, size, app);
+    }
 }
 
 // ─── WELCOME ─────────────────────────────────────────────────────────────────
 fn draw_welcome(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Length(1),
-                 Constraint::Fill(1),
-                 Constraint::Length(1),
-    ])
-    .split(area);
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
 
     // Statusbar top
     let title_bar = Paragraph::new(Line::from(vec![
         Span::styled("  hdev ", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                                              Span::styled("v0.1.0 ", Style::default().fg(FG_DIM)),
-                                              Span::styled("— HackerOS Code Editor", Style::default().fg(FG_DIM)),
+        Span::styled("v0.1.0 ", Style::default().fg(FG_DIM)),
+        Span::styled("— HackerOS Code Editor", Style::default().fg(FG_DIM)),
     ])).style(Style::default().bg(BG2));
     f.render_widget(title_bar, chunks[0]);
 
@@ -96,22 +96,22 @@ fn draw_welcome(f: &mut Frame, area: Rect, app: &App) {
 
     // Center column
     let horiz = Layout::default()
-    .direction(Direction::Horizontal)
-    .constraints([
-        Constraint::Fill(1),
-                 Constraint::Length(56),
-                 Constraint::Fill(1),
-    ])
-    .split(main);
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(56),
+            Constraint::Fill(1),
+        ])
+        .split(main);
 
     let vert = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Fill(1),
-                 Constraint::Length(26),
-                 Constraint::Fill(1),
-    ])
-    .split(horiz[1]);
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(26),
+            Constraint::Fill(1),
+        ])
+        .split(horiz[1]);
 
     let panel = vert[1];
 
@@ -139,8 +139,8 @@ fn draw_welcome(f: &mut Frame, area: Rect, app: &App) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  HackerOS Code Editor", Style::default().fg(FG_DIM)),
-                   Span::styled("  ·  ", Style::default().fg(BORDER)),
-                   Span::styled("v0.1.0", Style::default().fg(FG_DIM)),
+            Span::styled("  ·  ", Style::default().fg(BORDER)),
+            Span::styled("v0.1.0", Style::default().fg(FG_DIM)),
         ]),
         Line::from(""),
     ];
@@ -167,28 +167,28 @@ fn draw_welcome(f: &mut Frame, area: Rect, app: &App) {
         for s in separator { menu_lines.push(s); }
         menu_lines.push(Line::from(vec![
             Span::styled(format!("  {} ", item.icon()), Style::default().fg(ACCENT2)),
-                                   Span::styled(format!("{}{}", prefix, item.label()), style),
+            Span::styled(format!("{}{}", prefix, item.label()), style),
         ]));
     }
 
     menu_lines.push(Line::from(""));
     menu_lines.push(Line::from(vec![
         Span::styled("  Ctrl+H Pomoc", Style::default().fg(FG_DIM)),
-                               Span::styled("  ·  ", Style::default().fg(BORDER)),
-                               Span::styled("↑↓ Navigate", Style::default().fg(FG_DIM)),
-                               Span::styled("  ·  ", Style::default().fg(BORDER)),
-                               Span::styled("Enter Select", Style::default().fg(FG_DIM)),
+        Span::styled("  ·  ", Style::default().fg(BORDER)),
+        Span::styled("↑↓ Navigate", Style::default().fg(FG_DIM)),
+        Span::styled("  ·  ", Style::default().fg(BORDER)),
+        Span::styled("Enter Select", Style::default().fg(FG_DIM)),
     ]));
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(BORDER_ACTIVE))
-    .style(Style::default().bg(BG2));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_ACTIVE))
+        .style(Style::default().bg(BG2));
 
     let para = Paragraph::new(menu_lines)
-    .block(block)
-    .style(Style::default().bg(BG2));
+        .block(block)
+        .style(Style::default().bg(BG2));
     f.render_widget(para, panel);
 
     draw_statusbar(f, chunks[2], app);
@@ -197,14 +197,14 @@ fn draw_welcome(f: &mut Frame, area: Rect, app: &App) {
 // ─── MAIN LAYOUT ─────────────────────────────────────────────────────────────
 fn draw_main_layout(f: &mut Frame, area: Rect, app: &App) {
     let top_chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Length(1),   // title bar
-                 Constraint::Length(2),   // tab bar
-                 Constraint::Fill(1),     // main content
-                 Constraint::Length(1),   // status bar
-    ])
-    .split(area);
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),   // title bar
+            Constraint::Length(2),   // tab bar
+            Constraint::Fill(1),     // main content
+            Constraint::Length(1),   // status bar
+        ])
+        .split(area);
 
     draw_titlebar(f, top_chunks[0], app);
     draw_tabs(f, top_chunks[1], app);
@@ -217,17 +217,17 @@ fn draw_main_layout(f: &mut Frame, area: Rect, app: &App) {
 
     let main_chunks = if show_tree {
         Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(28),
-                     Constraint::Fill(1),
-        ])
-        .split(main_area)
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(28),
+                Constraint::Fill(1),
+            ])
+            .split(main_area)
     } else {
         Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Fill(1)])
-        .split(main_area)
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Fill(1)])
+            .split(main_area)
     };
 
     if show_tree {
@@ -235,9 +235,9 @@ fn draw_main_layout(f: &mut Frame, area: Rect, app: &App) {
         let editor_area = main_chunks[1];
         if show_term {
             let vert = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Fill(2), Constraint::Length(16)])
-            .split(editor_area);
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Fill(2), Constraint::Length(16)])
+                .split(editor_area);
             draw_editor(f, vert[0], app);
             draw_terminal(f, vert[1], app);
         } else {
@@ -247,9 +247,9 @@ fn draw_main_layout(f: &mut Frame, area: Rect, app: &App) {
         let editor_area = main_chunks[0];
         if show_term {
             let vert = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Fill(2), Constraint::Length(16)])
-            .split(editor_area);
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Fill(2), Constraint::Length(16)])
+                .split(editor_area);
             draw_editor(f, vert[0], app);
             draw_terminal(f, vert[1], app);
         } else {
@@ -264,20 +264,20 @@ fn draw_titlebar(f: &mut Frame, area: Rect, app: &App) {
     let current = app.current_buffer().map(|b| b.display_name()).unwrap_or_default();
     let modified = app.current_buffer().map(|b| b.modified).unwrap_or(false);
     let lang = app.current_buffer()
-    .map(|b| b.language.display_name())
-    .unwrap_or("Plain Text");
+        .map(|b| b.language.display_name())
+        .unwrap_or("Plain Text");
 
     let title = Line::from(vec![
         Span::styled(" hdev ", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                           Span::styled("│ ", Style::default().fg(BORDER)),
-                           Span::styled(&current, Style::default().fg(FG)),
-                           if modified { Span::styled(" ●", Style::default().fg(WARN)) } else { Span::raw("") },
-                               Span::styled("  │ ", Style::default().fg(BORDER)),
-                           Span::styled(lang, Style::default().fg(FG_DIM)),
+        Span::styled("│ ", Style::default().fg(BORDER)),
+        Span::styled(&current, Style::default().fg(FG)),
+        if modified { Span::styled(" ●", Style::default().fg(WARN)) } else { Span::raw("") },
+        Span::styled("  │ ", Style::default().fg(BORDER)),
+        Span::styled(lang, Style::default().fg(FG_DIM)),
     ]);
     f.render_widget(
         Paragraph::new(title).style(Style::default().bg(BG2)),
-                    area,
+        area,
     );
 }
 
@@ -285,7 +285,7 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
     if app.buffers.is_empty() {
         f.render_widget(
             Block::default().style(Style::default().bg(TAB_BG)),
-                        area,
+            area,
         );
         return;
     }
@@ -302,24 +302,24 @@ fn draw_tabs(f: &mut Frame, area: Rect, app: &App) {
             line_spans.push(Span::styled("▌", Style::default().fg(TAB_ACTIVE)));
             line_spans.push(Span::styled(
                 format!(" {} ", lang_icon),
-                    Style::default().fg(lang_col).bg(BG3),
+                Style::default().fg(lang_col).bg(BG3),
             ));
             line_spans.push(Span::styled(
                 format!(" {} {}", name, modified_mark),
-                    Style::default().fg(FG).bg(BG3).add_modifier(Modifier::BOLD),
+                Style::default().fg(FG).bg(BG3).add_modifier(Modifier::BOLD),
             ));
             line_spans.push(Span::styled("▐", Style::default().fg(TAB_ACTIVE)));
         } else {
             line_spans.push(Span::styled(
                 format!("  {} {} {}  ", lang_icon, name, modified_mark),
-                    Style::default().fg(FG_DIM).bg(TAB_BG),
+                Style::default().fg(FG_DIM).bg(TAB_BG),
             ));
         }
         line_spans.push(Span::raw(" "));
     }
 
     let para = Paragraph::new(Line::from(line_spans))
-    .style(Style::default().bg(TAB_BG));
+        .style(Style::default().bg(TAB_BG));
     f.render_widget(para, area);
 }
 
@@ -330,9 +330,9 @@ fn draw_file_tree(f: &mut Frame, area: Rect, app: &App) {
     let selected = tree.selected;
 
     let title = app.file_tree.root.as_ref()
-    .and_then(|p| p.file_name())
-    .and_then(|n| n.to_str())
-    .unwrap_or("explorer");
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("explorer");
 
     let items: Vec<ListItem> = nodes.iter().enumerate().map(|(i, node)| {
         let is_sel = i == selected;
@@ -354,30 +354,30 @@ fn draw_file_tree(f: &mut Frame, area: Rect, app: &App) {
         let row_bg = if is_sel { BG3 } else { BG2 };
         let line = Line::from(vec![
             Span::raw(indent),
-                              Span::styled(icon, Style::default().fg(if node.is_dir { ACCENT2 } else { FG_DIM })),
-                              Span::styled(&node.name, name_style),
+            Span::styled(icon, Style::default().fg(if node.is_dir { ACCENT2 } else { FG_DIM })),
+            Span::styled(&node.name, name_style),
         ]).style(Style::default().bg(row_bg));
 
         ListItem::new(line)
     }).collect();
 
     let block = Block::default()
-    .borders(Borders::RIGHT)
-    .border_style(Style::default().fg(BORDER))
-    .title(Line::from(vec![
-        Span::styled(" ⊞ ", Style::default().fg(ACCENT)),
-                      Span::styled(title, Style::default().fg(FG)),
-                      Span::raw(" "),
-    ]))
-    .style(Style::default().bg(BG2));
+        .borders(Borders::RIGHT)
+        .border_style(Style::default().fg(BORDER))
+        .title(Line::from(vec![
+            Span::styled(" ⊞ ", Style::default().fg(ACCENT)),
+            Span::styled(title, Style::default().fg(FG)),
+            Span::raw(" "),
+        ]))
+        .style(Style::default().bg(BG2));
 
     let mut state = ListState::default();
     state.select(Some(selected));
 
     f.render_stateful_widget(
         List::new(items).block(block),
-                             area,
-                             &mut state,
+        area,
+        &mut state,
     );
 }
 
@@ -386,11 +386,11 @@ fn draw_editor(f: &mut Frame, area: Rect, app: &App) {
     if app.buffers.is_empty() {
         let msg = Paragraph::new(vec![
             Line::from(""),
-                                 Line::from(vec![Span::styled("  No file open", Style::default().fg(FG_DIM))]),
-                                 Line::from(""),
-                                 Line::from(vec![Span::styled("  Ctrl+T  new file", Style::default().fg(FG_DIM))]),
-                                 Line::from(vec![Span::styled("  Ctrl+O  open file/folder", Style::default().fg(FG_DIM))]),
-                                 Line::from(vec![Span::styled("  Ctrl+H  pomoc (skróty)", Style::default().fg(FG_DIM))]),
+            Line::from(vec![Span::styled("  No file open", Style::default().fg(FG_DIM))]),
+            Line::from(""),
+            Line::from(vec![Span::styled("  Ctrl+T  new file", Style::default().fg(FG_DIM))]),
+            Line::from(vec![Span::styled("  Ctrl+O  open file/folder", Style::default().fg(FG_DIM))]),
+            Line::from(vec![Span::styled("  Ctrl+H  pomoc (skróty)", Style::default().fg(FG_DIM))]),
         ])
         .block(Block::default().style(Style::default().bg(BG)));
         f.render_widget(msg, area);
@@ -405,9 +405,9 @@ fn draw_editor(f: &mut Frame, area: Rect, app: &App) {
     // Layout: line numbers | code
     let ln_width = format!("{}", buf.lines.len()).len().max(3) as u16 + 2;
     let chunks = Layout::default()
-    .direction(Direction::Horizontal)
-    .constraints([Constraint::Length(ln_width), Constraint::Fill(1)])
-    .split(area);
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(ln_width), Constraint::Fill(1)])
+        .split(area);
 
     let view_height = area.height as usize;
     let view_width = chunks[1].width as usize;
@@ -508,7 +508,7 @@ fn draw_editor(f: &mut Frame, area: Rect, app: &App) {
                     let cursor_char = chars[ci];
                     spans.push(Span::styled(
                         cursor_char.to_string(),
-                                            Style::default().fg(BG).bg(ACCENT),
+                        Style::default().fg(BG).bg(ACCENT),
                     ));
                     ci += 1;
                     break;
@@ -530,7 +530,7 @@ fn draw_editor(f: &mut Frame, area: Rect, app: &App) {
     }
 
     let block = Block::default()
-    .style(Style::default().bg(BG));
+        .style(Style::default().bg(BG));
     f.render_widget(Paragraph::new(code_lines).block(block), chunks[1]);
 }
 
@@ -545,16 +545,16 @@ fn draw_terminal(f: &mut Frame, area: Rect, app: &App) {
     };
 
     let block = Block::default()
-    .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(if app.focus_terminal { BORDER_ACTIVE } else { BORDER }))
-    .title(Line::from(vec![
-        Span::styled(" ❯ ", Style::default().fg(ACCENT)),
-                      Span::styled("terminal", Style::default().fg(FG)),
-                      Span::styled("  Ctrl+B zamknij  Esc wróć do edytora", Style::default().fg(FG_DIM)),
-                      Span::styled(&scroll_hint, Style::default().fg(WARN)),
-    ]))
-    .style(Style::default().bg(BG2));
+        .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(if app.focus_terminal { BORDER_ACTIVE } else { BORDER }))
+        .title(Line::from(vec![
+            Span::styled(" ❯ ", Style::default().fg(ACCENT)),
+            Span::styled("terminal", Style::default().fg(FG)),
+            Span::styled("  Ctrl+B zamknij  Esc wróć do edytora", Style::default().fg(FG_DIM)),
+            Span::styled(&scroll_hint, Style::default().fg(WARN)),
+        ]))
+        .style(Style::default().bg(BG2));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -602,7 +602,7 @@ fn draw_terminal(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_widget(
         Paragraph::new(hist_lines).style(Style::default().bg(BG2)),
-                    hist_area,
+        hist_area,
     );
 
     // Linia wejściowa — kursor na podstawie metod panelu (char-safe)
@@ -613,13 +613,13 @@ fn draw_terminal(f: &mut Frame, area: Rect, app: &App) {
 
     let input_line = Line::from(vec![
         Span::styled(&prompt,    Style::default().fg(ACCENT).bg(BG2)),
-                                Span::styled(&before,    Style::default().fg(FG).bg(BG2)),
-                                Span::styled(&cursor_ch, Style::default().fg(BG).bg(ACCENT)),
-                                Span::styled(&after,     Style::default().fg(FG).bg(BG2)),
+        Span::styled(&before,    Style::default().fg(FG).bg(BG2)),
+        Span::styled(&cursor_ch, Style::default().fg(BG).bg(ACCENT)),
+        Span::styled(&after,     Style::default().fg(FG).bg(BG2)),
     ]);
     f.render_widget(
         Paragraph::new(input_line).style(Style::default().bg(BG2)),
-                    input_area,
+        input_area,
     );
 }
 
@@ -627,15 +627,15 @@ fn draw_terminal(f: &mut Frame, area: Rect, app: &App) {
 // ─── MARKETPLACE ─────────────────────────────────────────────────────────────
 fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Length(1),   // title
-                 Constraint::Length(3),   // tabs + filter
-                 Constraint::Fill(1),     // list + detail
-                 Constraint::Length(1),   // status
-                 Constraint::Length(1),   // keys
-    ])
-    .split(area);
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),   // title
+            Constraint::Length(3),   // tabs + filter
+            Constraint::Fill(1),     // list + detail
+            Constraint::Length(1),   // status
+            Constraint::Length(1),   // keys
+        ])
+        .split(area);
 
     let market = &app.marketplace;
 
@@ -643,12 +643,12 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("  ◎ hdev Marketplace", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                                  Span::styled("  —  pluginy dla HackerOS", Style::default().fg(FG_DIM)),
-                                  if !market.filter.is_empty() {
-                                      Span::styled(format!("  filter: {}", market.filter), Style::default().fg(WARN))
-                                  } else { Span::raw("") },
+            Span::styled("  —  pluginy dla HackerOS", Style::default().fg(FG_DIM)),
+            if !market.filter.is_empty() {
+                Span::styled(format!("  filter: {}", market.filter), Style::default().fg(WARN))
+            } else { Span::raw("") },
         ])).style(Style::default().bg(BG2)),
-                    chunks[0],
+        chunks[0],
     );
 
     // ── Tabs ──
@@ -660,16 +660,16 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
         }
     }).collect();
     let tabs_block = Block::default()
-    .borders(Borders::BOTTOM)
-    .border_style(Style::default().fg(BORDER))
-    .style(Style::default().bg(BG2));
+        .borders(Borders::BOTTOM)
+        .border_style(Style::default().fg(BORDER))
+        .style(Style::default().bg(BG2));
     f.render_widget(Paragraph::new(Line::from(tabs_text)).block(tabs_block), chunks[1]);
 
     // ── Lista + detail ──
     let content_chunks = Layout::default()
-    .direction(Direction::Horizontal)
-    .constraints([Constraint::Length(38), Constraint::Fill(1)])
-    .split(chunks[2]);
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(38), Constraint::Fill(1)])
+        .split(chunks[2]);
 
     // Ładowanie
     if !market.loaded {
@@ -696,8 +696,8 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
             let cat_label = p.category_display();
             let line1 = Line::from(vec![
                 Span::styled(format!("  {:8} ", cat_label), Style::default().fg(cat_color).bg(row_bg)),
-                                   Span::styled(&p.name, name_style),
-                                   installed_badge,
+                Span::styled(&p.name, name_style),
+                installed_badge,
             ]).style(Style::default().bg(row_bg));
             let author = if p.author.is_empty() { "—".to_string() } else { p.author.clone() };
             let line2 = Line::from(
@@ -708,10 +708,10 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
 
         let list_title = format!(" {} pluginów ", plugins.len());
         let list_block = Block::default()
-        .borders(Borders::RIGHT)
-        .border_style(Style::default().fg(BORDER))
-        .title(Span::styled(list_title, Style::default().fg(FG_DIM)))
-        .style(Style::default().bg(BG));
+            .borders(Borders::RIGHT)
+            .border_style(Style::default().fg(BORDER))
+            .title(Span::styled(list_title, Style::default().fg(FG_DIM)))
+            .style(Style::default().bg(BG));
         let mut state = ListState::default();
         state.select(Some(market.selected));
         f.render_stateful_widget(List::new(items).block(list_block), content_chunks[0], &mut state);
@@ -724,12 +724,12 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
                 Line::from(""),
                 Line::from(vec![
                     Span::styled("  ", Style::default()),
-                           Span::styled(&plugin.name, Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                           Span::styled(format!("  v{}", ver), Style::default().fg(FG_DIM)),
+                    Span::styled(&plugin.name, Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("  v{}", ver), Style::default().fg(FG_DIM)),
                 ]),
                 Line::from(vec![
                     Span::styled(format!("  {}  ", plugin.category_display()), Style::default().fg(plugin.category_color())),
-                           Span::styled(if plugin.author.is_empty() { "—" } else { &plugin.author }, Style::default().fg(ACCENT2)),
+                    Span::styled(if plugin.author.is_empty() { "—" } else { &plugin.author }, Style::default().fg(ACCENT2)),
                 ]),
                 Line::from(""),
                 Line::from(Span::styled("  Opis", Style::default().fg(FG_DIM))),
@@ -742,16 +742,16 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
                 if !plugin.tags.is_empty() {
                     Line::from(Span::styled(format!("  #{}", plugin.tags.join("  #")), Style::default().fg(FG_DIM)))
                 } else { Line::from("") },
-                    Line::from(""),
-                    if is_installed {
-                        Line::from(Span::styled("  [ Enter → Odinstaluj ]", Style::default().fg(ERR).add_modifier(Modifier::BOLD)))
-                    } else {
-                        Line::from(Span::styled("  [ Enter → Pobierz i zainstaluj .hk ]", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)))
-                    },
+                Line::from(""),
+                if is_installed {
+                    Line::from(Span::styled("  [ Enter → Odinstaluj ]", Style::default().fg(ERR).add_modifier(Modifier::BOLD)))
+                } else {
+                    Line::from(Span::styled("  [ Enter → Pobierz i zainstaluj .hk ]", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)))
+                },
             ];
             f.render_widget(
                 Paragraph::new(detail_lines).wrap(Wrap { trim: false }).style(Style::default().bg(BG)),
-                            content_chunks[1],
+                content_chunks[1],
             );
         }
     }
@@ -766,25 +766,25 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
     };
     f.render_widget(
         Paragraph::new(Span::styled(format!("  {}", market.status_msg), status_style))
-        .style(Style::default().bg(BG2)),
-                    chunks[3],
+            .style(Style::default().bg(BG2)),
+        chunks[3],
     );
 
     // ── Klawisze ──
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("  Tab/Shift+Tab ", Style::default().fg(ACCENT)),
-                                  Span::styled("kategoria  ", Style::default().fg(FG_DIM)),
-                                  Span::styled("↑↓ ", Style::default().fg(ACCENT)),
-                                  Span::styled("nawiguj  ", Style::default().fg(FG_DIM)),
-                                  Span::styled("Enter ", Style::default().fg(ACCENT)),
-                                  Span::styled("instaluj/odinstaluj  ", Style::default().fg(FG_DIM)),
-                                  Span::styled("litery ", Style::default().fg(ACCENT)),
-                                  Span::styled("filtruj  ", Style::default().fg(FG_DIM)),
-                                  Span::styled("Esc ", Style::default().fg(ACCENT)),
-                                  Span::styled("wróć", Style::default().fg(FG_DIM)),
+            Span::styled("kategoria  ", Style::default().fg(FG_DIM)),
+            Span::styled("↑↓ ", Style::default().fg(ACCENT)),
+            Span::styled("nawiguj  ", Style::default().fg(FG_DIM)),
+            Span::styled("Enter ", Style::default().fg(ACCENT)),
+            Span::styled("instaluj/odinstaluj  ", Style::default().fg(FG_DIM)),
+            Span::styled("litery ", Style::default().fg(ACCENT)),
+            Span::styled("filtruj  ", Style::default().fg(FG_DIM)),
+            Span::styled("Esc ", Style::default().fg(ACCENT)),
+            Span::styled("wróć", Style::default().fg(FG_DIM)),
         ])).style(Style::default().bg(BG2)),
-                    chunks[4],
+        chunks[4],
     );
 }
 
@@ -796,20 +796,20 @@ fn bool_str(b: bool) -> String {
 
 fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([
-        Constraint::Length(1),
-                 Constraint::Fill(1),
-                 Constraint::Length(1),
-    ])
-    .split(area);
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .split(area);
 
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("   hdev Settings", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                                  Span::styled("   — stored in ~/.cache/HackerOS/hdev/config.json", Style::default().fg(FG_DIM)),
+            Span::styled("   — stored in ~/.cache/HackerOS/hdev/config.json", Style::default().fg(FG_DIM)),
         ])).style(Style::default().bg(BG2)),
-                    chunks[0],
+        chunks[0],
     );
 
     let cfg    = &app.config;
@@ -853,7 +853,7 @@ fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
             // Sekcja nagłówkowa
             return Line::from(vec![
                 Span::raw("  "),
-                              Span::styled(row.label, Style::default().fg(FG_DIM).add_modifier(Modifier::BOLD)),
+                Span::styled(row.label, Style::default().fg(FG_DIM).add_modifier(Modifier::BOLD)),
             ]);
         }
 
@@ -875,8 +875,8 @@ fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
 
         Line::from(vec![
             Span::styled(format!("{:<38}", row.label), key_style),
-                   Span::styled(format!(" {:<28}", &row.value), val_style),
-                   if is_sel { Span::styled(format!("  {}", row.hint), hint_style) } else { Span::raw("") },
+            Span::styled(format!(" {:<28}", &row.value), val_style),
+            if is_sel { Span::styled(format!("  {}", row.hint), hint_style) } else { Span::raw("") },
         ]).style(Style::default().bg(row_bg))
     }).collect();
 
@@ -885,11 +885,11 @@ fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
     all_lines.push(Line::from(""));
     all_lines.push(Line::from(vec![
         Span::styled("  Esc ", Style::default().fg(ACCENT)),
-                              Span::styled("zapisz i wróć   ", Style::default().fg(FG_DIM)),
-                              Span::styled("↑↓ ", Style::default().fg(ACCENT)),
-                              Span::styled("nawiguj   ", Style::default().fg(FG_DIM)),
-                              Span::styled("←→ / Enter ", Style::default().fg(ACCENT)),
-                              Span::styled("zmień wartość", Style::default().fg(FG_DIM)),
+        Span::styled("zapisz i wróć   ", Style::default().fg(FG_DIM)),
+        Span::styled("↑↓ ", Style::default().fg(ACCENT)),
+        Span::styled("nawiguj   ", Style::default().fg(FG_DIM)),
+        Span::styled("←→ / Enter ", Style::default().fg(ACCENT)),
+        Span::styled("zmień wartość", Style::default().fg(FG_DIM)),
     ]));
 
     let block = Block::default().style(Style::default().bg(BG));
@@ -922,7 +922,7 @@ fn draw_statusbar(f: &mut Frame, area: Rect, app: &App) {
             Span::styled(" ", Style::default().bg(BG2)),
             Span::styled(
                 format!(" {} ", b.display_name()),
-                    Style::default().fg(FG).bg(BG2),
+                Style::default().fg(FG).bg(BG2),
             ),
             if b.modified {
                 Span::styled(" ● ", Style::default().fg(WARN).bg(BG2))
@@ -946,16 +946,16 @@ fn draw_statusbar(f: &mut Frame, area: Rect, app: &App) {
         vec![
             Span::styled(
                 format!(" {} ", b.language.display_name()),
-                    Style::default().fg(b.language.icon_color()).bg(BG3),
+                Style::default().fg(b.language.icon_color()).bg(BG3),
             ),
             Span::styled(" ", Style::default().bg(BG2)),
             Span::styled(
                 format!(" {}:{} ", b.cursor_row + 1, b.cursor_col + 1),
-                    Style::default().fg(FG_DIM).bg(BG2),
+                Style::default().fg(FG_DIM).bg(BG2),
             ),
             Span::styled(
                 format!(" {} lines ", b.lines.len()),
-                    Style::default().fg(FG_DIM).bg(BG2),
+                Style::default().fg(FG_DIM).bg(BG2),
             ),
         ]
     } else {
@@ -965,7 +965,7 @@ fn draw_statusbar(f: &mut Frame, area: Rect, app: &App) {
     // Build full bar
     let status_msg = Span::styled(
         format!("  {}  ", &app.status_msg),
-            status_style,
+        status_style,
     );
 
     // Calculate widths
@@ -982,21 +982,33 @@ fn draw_statusbar(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_widget(
         Paragraph::new(Line::from(spans)).style(Style::default().bg(BG2)),
-                    area,
+        area,
     );
 }
 
 // ─── DIALOGS ─────────────────────────────────────────────────────────────────
 fn draw_input_dialog(f: &mut Frame, area: Rect, app: &App) {
-    let (title, prompt) = match &app.input_mode {
-        InputMode::NewFileName  => ("New File", "Enter file name:"),
-        InputMode::SaveAs       => ("Save As", "Enter file path:"),
-        InputMode::OpenPath     => ("Open", "Enter folder/file path:"),
-        _                       => ("Input", ""),
+    let (title, prompt, hint) = match &app.input_mode {
+        InputMode::NewFileName => (
+            "Nowy plik",
+            "Podaj nazwe pliku (np. main.rs):",
+            "Esc = anuluj   Enter = utwórz",
+        ),
+        InputMode::SaveAs => (
+            "Zapisz jako",
+            "Podaj pelna sciezke pliku:",
+            "Esc = anuluj   Enter = zapisz",
+        ),
+        InputMode::OpenPath => (
+            "Otworz",
+            "Wpisz sciezke pliku lub folderu:",
+            "Tab = autouzupelnianie   Esc = anuluj   Enter = otworz",
+        ),
+        _ => ("Input", "", ""),
     };
 
-    let width = 50u16;
-    let height = 5u16;
+    let width  = area.width.min(72).max(50);
+    let height = 6u16;
     let x = (area.width.saturating_sub(width)) / 2;
     let y = (area.height.saturating_sub(height)) / 2;
     let dialog = Rect { x, y, width, height };
@@ -1004,24 +1016,36 @@ fn draw_input_dialog(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, dialog);
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(BORDER_ACTIVE))
-    .title(Line::from(vec![
-        Span::styled(format!(" {} ", title), Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-    ]))
-    .style(Style::default().bg(BG3));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_ACTIVE))
+        .title(Line::from(vec![
+            Span::styled(format!(" {} ", title), Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+        ]))
+        .style(Style::default().bg(BG3));
 
     let inner = block.inner(dialog);
     f.render_widget(block, dialog);
 
+    // Truncate dialog_input dla wyswietlenia jesli za dlugi
+    let max_input_w = (width as usize).saturating_sub(6);
+    let display_input = if app.dialog_input.len() > max_input_w {
+        // Pokazuj koniec stringa (gdzie uzytkownik pisze)
+        let skip = app.dialog_input.len() - max_input_w;
+        format!("...{}", &app.dialog_input[skip..])
+    } else {
+        app.dialog_input.clone()
+    };
+
     let content = vec![
         Line::from(Span::styled(format!(" {}", prompt), Style::default().fg(FG_DIM))),
         Line::from(vec![
-            Span::styled(" ❯ ", Style::default().fg(ACCENT)),
-                   Span::styled(&app.dialog_input, Style::default().fg(FG)),
-                   Span::styled("█", Style::default().fg(ACCENT)),
+            Span::styled(" > ", Style::default().fg(ACCENT)),
+            Span::styled(&display_input, Style::default().fg(FG)),
+            Span::styled("_", Style::default().fg(ACCENT)),
         ]),
+        Line::from(""),
+        Line::from(Span::styled(format!(" {}", hint), Style::default().fg(FG_DIM))),
     ];
     f.render_widget(Paragraph::new(content), inner);
 }
@@ -1039,21 +1063,21 @@ fn draw_search_bar(f: &mut Frame, area: Rect, app: &App) {
     let idx = if count > 0 { buf.search_idx + 1 } else { 0 };
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(WARN))
-    .title(Line::from(vec![
-        Span::styled(format!("  {}/{} ", idx, count), Style::default().fg(WARN)),
-    ]))
-    .style(Style::default().bg(BG3));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(WARN))
+        .title(Line::from(vec![
+            Span::styled(format!("  {}/{} ", idx, count), Style::default().fg(WARN)),
+        ]))
+        .style(Style::default().bg(BG3));
 
     let inner = block.inner(bar);
     f.render_widget(block, bar);
 
     let line = Line::from(vec![
         Span::styled(" ❯ ", Style::default().fg(WARN)),
-                          Span::styled(&app.dialog_input, Style::default().fg(FG)),
-                          Span::styled("█", Style::default().fg(WARN)),
+        Span::styled(&app.dialog_input, Style::default().fg(FG)),
+        Span::styled("█", Style::default().fg(WARN)),
     ]);
     f.render_widget(Paragraph::new(line), inner);
 }
@@ -1063,8 +1087,8 @@ fn draw_command_bar(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, bar);
     let line = Line::from(vec![
         Span::styled(" : ", Style::default().fg(ACCENT).bg(BG3)),
-                          Span::styled(&app.dialog_input, Style::default().fg(FG).bg(BG3)),
-                          Span::styled("█", Style::default().fg(ACCENT).bg(BG3)),
+        Span::styled(&app.dialog_input, Style::default().fg(FG).bg(BG3)),
+        Span::styled("█", Style::default().fg(ACCENT).bg(BG3)),
     ]);
     f.render_widget(Paragraph::new(line).style(Style::default().bg(BG3)), bar);
 }
@@ -1078,18 +1102,18 @@ fn draw_confirm_dialog(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, dialog);
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(ERR))
-    .title(Line::from(Span::styled(" WARN Confirm Delete ", Style::default().fg(ERR).add_modifier(Modifier::BOLD))))
-    .style(Style::default().bg(BG3));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(ERR))
+        .title(Line::from(Span::styled(" WARN Confirm Delete ", Style::default().fg(ERR).add_modifier(Modifier::BOLD))))
+        .style(Style::default().bg(BG3));
 
     let inner = block.inner(dialog);
     f.render_widget(block, dialog);
 
     let path = app.file_tree.selected_path()
-    .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string())
-    .unwrap_or_default();
+        .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("?").to_string())
+        .unwrap_or_default();
     let content = vec![
         Line::from(vec![Span::styled(format!(" Delete: {}", path), Style::default().fg(FG))]),
         Line::from(""),
@@ -1136,10 +1160,10 @@ fn draw_autocomplete(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, popup_area);
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(BORDER_ACTIVE))
-    .style(Style::default().bg(BG3));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_ACTIVE))
+        .style(Style::default().bg(BG3));
 
     let inner = block.inner(popup_area);
     f.render_widget(block, popup_area);
@@ -1161,8 +1185,8 @@ fn draw_autocomplete(f: &mut Frame, area: Rect, app: &App) {
 
         let line = ratatui::text::Line::from(vec![
             Span::styled(format!("{} ", kind_icon), Style::default().fg(kind_color).bg(item_bg)),
-                                             Span::styled(format!("{:<w$}", label_truncated, w = label_w), Style::default().fg(item_fg).bg(item_bg)),
-                                             Span::styled(format!(" {}", item.detail), Style::default().fg(FG_DIM).bg(item_bg)),
+            Span::styled(format!("{:<w$}", label_truncated, w = label_w), Style::default().fg(item_fg).bg(item_bg)),
+            Span::styled(format!(" {}", item.detail), Style::default().fg(FG_DIM).bg(item_bg)),
         ]).style(Style::default().bg(item_bg));
 
         ratatui::widgets::ListItem::new(line)
@@ -1173,8 +1197,8 @@ fn draw_autocomplete(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_stateful_widget(
         ratatui::widgets::List::new(items),
-                             inner,
-                             &mut state,
+        inner,
+        &mut state,
     );
 }
 
@@ -1188,11 +1212,11 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
     f.render_widget(Clear, dialog);
 
     let block = Block::default()
-    .borders(Borders::ALL)
-    .border_type(BorderType::Rounded)
-    .border_style(Style::default().fg(BORDER_ACTIVE))
-    .title(Line::from(Span::styled(" ⌨ Skróty klawiszowe — Ctrl+H zamknij ", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))))
-    .style(Style::default().bg(BG3));
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BORDER_ACTIVE))
+        .title(Line::from(Span::styled(" ⌨ Skróty klawiszowe — Ctrl+H zamknij ", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))))
+        .style(Style::default().bg(BG3));
 
     let inner = block.inner(dialog);
     f.render_widget(block, dialog);
@@ -1200,7 +1224,7 @@ fn draw_help_overlay(f: &mut Frame, area: Rect) {
     let lines: Vec<Line> = pairs.iter().map(|(k, desc)| {
         Line::from(vec![
             Span::styled(format!("  {:<20}", k), Style::default().fg(ACCENT)),
-                   Span::styled(*desc, Style::default().fg(FG)),
+            Span::styled(*desc, Style::default().fg(FG)),
         ])
     }).collect();
     f.render_widget(Paragraph::new(lines), inner);
