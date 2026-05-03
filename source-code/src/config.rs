@@ -64,6 +64,7 @@ pub struct HdevConfig {
     pub terminal_shell: String,
     /// Nadpisanie języka dla bieżącej sesji ("auto" = automatyczne wykrywanie)
     pub default_language_override: String,
+    pub autocomplete_enabled: bool,
 }
 
 impl Default for HdevConfig {
@@ -84,6 +85,7 @@ impl Default for HdevConfig {
             .to_string(),
             terminal_shell: "sh".to_string(),
             default_language_override: "auto".to_string(),
+                autocomplete_enabled: true,
         }
     }
 }
