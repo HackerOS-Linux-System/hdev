@@ -1,4 +1,5 @@
 mod app;
+mod autocomplete;
 mod config;
 mod editor;
 mod highlight;
