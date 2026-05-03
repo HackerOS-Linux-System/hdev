@@ -1,7 +1,3 @@
-/// Plugin system for hdev
-/// .hk files are loaded from ~/.cache/HackerOS/hdev/plugins/
-/// This is a placeholder implementation — full support via marketplace.
-
 use std::path::PathBuf;
 use std::fs;
 
