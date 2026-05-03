@@ -14,7 +14,7 @@ use crate::editor::EditorMode;
 use crate::highlight::Highlighter;
 use crate::keybinds::keybind_help;
 use crate::marketplace::MarketplaceTab;
-use crate::utils::{stars, file_icon};
+use crate::utils::file_icon;
 
 // ─── colour palette ──────────────────────────────────────────────────────────
 const BG:       Color = Color::Rgb(13,  15,  20);
@@ -64,6 +64,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         }
         if app.show_help {
             draw_help_overlay(f, size);
+        }
+        if app.screen == AppScreen::Editor && app.autocomplete.visible && !app.focus_terminal {
+            draw_autocomplete(f, size, app);
         }
         if app.show_confirm_delete {
             draw_confirm_dialog(f, size, app);
@@ -348,12 +351,12 @@ fn draw_file_tree(f: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(FG)
         };
 
-        let bg = if is_sel { BG3 } else { BG2 };
+        let row_bg = if is_sel { BG3 } else { BG2 };
         let line = Line::from(vec![
             Span::raw(indent),
                               Span::styled(icon, Style::default().fg(if node.is_dir { ACCENT2 } else { FG_DIM })),
                               Span::styled(&node.name, name_style),
-        ]).style(Style::default().bg(BG));
+        ]).style(Style::default().bg(row_bg));
 
         ListItem::new(line)
     }).collect();
@@ -423,7 +426,7 @@ fn draw_editor(f: &mut Frame, area: Rect, app: &App) {
             } else {
                 Style::default().fg(LINE_NR)
             };
-            let bg = if is_current { HL_LINE } else { BG2 };
+            let _row_bg = if is_current { HL_LINE } else { BG2 };
             ln_lines.push(Line::from(
                 Span::styled(format!("{:>w$} ", row + 1, w = ln_width as usize - 1), style)
             ).style(Style::default().bg(BG)));
@@ -571,7 +574,7 @@ fn draw_terminal(f: &mut Frame, area: Rect, app: &App) {
         use crate::terminal_panel::TermLineKind;
         let (prefix, style) = match &line.kind {
             TermLineKind::Output => ("",   Style::default().fg(FG)),
-            TermLineKind::Error  => ("✗ ", Style::default().fg(ERR)),
+            TermLineKind::Error  => ("ERR ", Style::default().fg(ERR)),
             TermLineKind::Input  => ("",   Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
             TermLineKind::Info   => ("",   Style::default().fg(FG_DIM)),
         };
@@ -627,157 +630,168 @@ fn draw_marketplace(f: &mut Frame, area: Rect, app: &App) {
     .direction(Direction::Vertical)
     .constraints([
         Constraint::Length(1),   // title
-                 Constraint::Length(3),   // tabs
+                 Constraint::Length(3),   // tabs + filter
                  Constraint::Fill(1),     // list + detail
-                 Constraint::Length(2),   // status
-                 Constraint::Length(1),   // statusbar
+                 Constraint::Length(1),   // status
+                 Constraint::Length(1),   // keys
     ])
     .split(area);
 
-    // Title
+    let market = &app.marketplace;
+
+    // ── Title ──
     f.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  ◎ hdev ", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                                  Span::styled("Marketplace", Style::default().fg(FG)),
-                                  Span::styled("  —  plugins & extensions for HackerOS", Style::default().fg(FG_DIM)),
+            Span::styled("  ◎ hdev Marketplace", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+                                  Span::styled("  —  pluginy dla HackerOS", Style::default().fg(FG_DIM)),
+                                  if !market.filter.is_empty() {
+                                      Span::styled(format!("  filter: {}", market.filter), Style::default().fg(WARN))
+                                  } else { Span::raw("") },
         ])).style(Style::default().bg(BG2)),
                     chunks[0],
     );
 
-    // Tabs
-    let market = &app.marketplace;
+    // ── Tabs ──
     let tabs_text: Vec<Span> = MarketplaceTab::all().iter().map(|t| {
         if t == &market.tab {
-            Span::styled(t.display(), Style::default().fg(ACCENT).add_modifier(Modifier::BOLD).bg(BG3))
+            Span::styled(t.label(), Style::default().fg(ACCENT).add_modifier(Modifier::BOLD).bg(BG3))
         } else {
-            Span::styled(t.display(), Style::default().fg(FG_DIM).bg(BG2))
+            Span::styled(t.label(), Style::default().fg(FG_DIM).bg(BG2))
         }
     }).collect();
-    let tabs_line = Line::from(tabs_text);
     let tabs_block = Block::default()
     .borders(Borders::BOTTOM)
     .border_style(Style::default().fg(BORDER))
     .style(Style::default().bg(BG2));
-    f.render_widget(Paragraph::new(tabs_line).block(tabs_block), chunks[1]);
+    f.render_widget(Paragraph::new(Line::from(tabs_text)).block(tabs_block), chunks[1]);
 
-    // Split: list | detail
+    // ── Lista + detail ──
     let content_chunks = Layout::default()
     .direction(Direction::Horizontal)
     .constraints([Constraint::Length(38), Constraint::Fill(1)])
     .split(chunks[2]);
 
-    // Plugin list
-    let plugins = market.visible_plugins();
-    let items: Vec<ListItem> = plugins.iter().enumerate().map(|(i, p)| {
-        let is_sel = i == market.selected;
-        let _bg = if is_sel { BG3 } else { BG };
-        let name_style = if is_sel {
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD).bg(BG)
-        } else {
-            Style::default().fg(FG).bg(BG)
-        };
-        let installed_badge = if p.installed {
-            Span::styled(" ✓", Style::default().fg(Color::Rgb(0, 200, 100)))
-        } else {
-            Span::raw("")
-        };
-        let cat_color = p.category.color();
-        let line1 = Line::from(vec![
-            Span::styled(format!("  {} ", p.category.display()), Style::default().fg(cat_color).bg(BG)),
-                               Span::styled(&p.name, name_style),
-                               installed_badge,
-        ]).style(Style::default().bg(BG));
-        let line2 = Line::from(vec![
-            Span::styled(format!("    {} · {}", p.author, stars(p.rating)), Style::default().fg(FG_DIM).bg(BG)),
-        ]).style(Style::default().bg(BG));
-        ListItem::new(vec![line1, line2])
-    }).collect();
-
-    let list_block = Block::default()
-    .borders(Borders::RIGHT)
-    .border_style(Style::default().fg(BORDER))
-    .title(Line::from(vec![
-        Span::styled(format!(" {} plugins ", plugins.len()), Style::default().fg(FG_DIM)),
-    ]))
-    .style(Style::default().bg(BG));
-    let mut state = ListState::default();
-    state.select(Some(market.selected));
-    f.render_stateful_widget(List::new(items).block(list_block), content_chunks[0], &mut state);
-
-    // Plugin detail
-    if let Some(plugin) = plugins.get(market.selected) {
-        let detail_lines = vec![
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  ", Style::default()),
-                       Span::styled(&plugin.name, Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                       Span::styled(format!("  v{}", plugin.version), Style::default().fg(FG_DIM)),
-            ]),
-            Line::from(vec![
-                Span::styled(format!("  {} · ", plugin.category.display()), Style::default().fg(plugin.category.color())),
-                       Span::styled(&plugin.author, Style::default().fg(ACCENT2)),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  ", Style::default()),
-                       Span::styled(stars(plugin.rating), Style::default().fg(WARN)),
-                       Span::styled(format!("  ⬇ {}", plugin.downloads), Style::default().fg(FG_DIM)),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled("  Description", Style::default().fg(FG_DIM))),
-            Line::from("  ─────────────────────────────"),
-            Line::from(vec![Span::styled(format!("  {}", plugin.description), Style::default().fg(FG))]),
-            Line::from(""),
-            Line::from(Span::styled("  Tags", Style::default().fg(FG_DIM))),
-            Line::from(vec![Span::styled(
-                format!("  {}", plugin.tags.join("  ·  ")),
-                    Style::default().fg(ACCENT2),
-            )]),
-            Line::from(""),
-            Line::from(""),
-            if plugin.installed {
-                Line::from(vec![
-                    Span::styled("  [ Enter → Uninstall ]", Style::default().fg(ERR).add_modifier(Modifier::BOLD)),
-                ])
+    // Ładowanie
+    if !market.loaded {
+        let msg = Paragraph::new(Line::from(vec![
+            Span::styled("   Ładowanie listy pluginów...", Style::default().fg(FG_DIM)),
+        ])).style(Style::default().bg(BG));
+        f.render_widget(msg, chunks[2]);
+    } else {
+        let plugins = market.visible_plugins();
+        let items: Vec<ListItem> = plugins.iter().enumerate().map(|(i, p)| {
+            let is_sel      = i == market.selected;
+            let row_bg      = if is_sel { BG3 } else { BG };
+            let name_style  = if is_sel {
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD).bg(row_bg)
             } else {
-                Line::from(vec![
-                    Span::styled("  [ Enter → Install ]", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
-                           Span::styled("   (placeholder)", Style::default().fg(FG_DIM)),
-                ])
-            },
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("  ⚠ Plugin support is a placeholder. Full .hk integration", Style::default().fg(WARN)),
-            ]),
-            Line::from(vec![
-                Span::styled("    is coming in a future release.", Style::default().fg(WARN)),
-            ]),
-        ];
+                Style::default().fg(FG).bg(row_bg)
+            };
+            let is_installed = p.is_installed(&market.installed);
+            let installed_badge = if is_installed {
+                Span::styled(" OK", Style::default().fg(Color::Rgb(0, 200, 100)))
+            } else { Span::raw("") };
 
-        let detail_block = Block::default()
+            let cat_color = p.category_color();
+            let cat_label = p.category_display();
+            let line1 = Line::from(vec![
+                Span::styled(format!("  {:8} ", cat_label), Style::default().fg(cat_color).bg(row_bg)),
+                                   Span::styled(&p.name, name_style),
+                                   installed_badge,
+            ]).style(Style::default().bg(row_bg));
+            let author = if p.author.is_empty() { "—".to_string() } else { p.author.clone() };
+            let line2 = Line::from(
+                Span::styled(format!("    {}", author), Style::default().fg(FG_DIM).bg(row_bg))
+            ).style(Style::default().bg(row_bg));
+            ListItem::new(vec![line1, line2])
+        }).collect();
+
+        let list_title = format!(" {} pluginów ", plugins.len());
+        let list_block = Block::default()
+        .borders(Borders::RIGHT)
+        .border_style(Style::default().fg(BORDER))
+        .title(Span::styled(list_title, Style::default().fg(FG_DIM)))
         .style(Style::default().bg(BG));
-        f.render_widget(Paragraph::new(detail_lines).block(detail_block).wrap(Wrap { trim: false }), content_chunks[1]);
+        let mut state = ListState::default();
+        state.select(Some(market.selected));
+        f.render_stateful_widget(List::new(items).block(list_block), content_chunks[0], &mut state);
+
+        // ── Detail ──
+        if let Some(plugin) = plugins.get(market.selected) {
+            let is_installed = plugin.is_installed(&market.installed);
+            let ver = if plugin.version.is_empty() { "?".to_string() } else { plugin.version.clone() };
+            let detail_lines = vec![
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  ", Style::default()),
+                           Span::styled(&plugin.name, Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+                           Span::styled(format!("  v{}", ver), Style::default().fg(FG_DIM)),
+                ]),
+                Line::from(vec![
+                    Span::styled(format!("  {}  ", plugin.category_display()), Style::default().fg(plugin.category_color())),
+                           Span::styled(if plugin.author.is_empty() { "—" } else { &plugin.author }, Style::default().fg(ACCENT2)),
+                ]),
+                Line::from(""),
+                Line::from(Span::styled("  Opis", Style::default().fg(FG_DIM))),
+                Line::from("  ─────────────────────────────────"),
+                Line::from(Span::styled(format!("  {}", plugin.description), Style::default().fg(FG))),
+                Line::from(""),
+                Line::from(Span::styled("  Plik .hk:", Style::default().fg(FG_DIM))),
+                Line::from(Span::styled(format!("  {}", plugin.download), Style::default().fg(Color::Rgb(100,160,255)))),
+                Line::from(""),
+                if !plugin.tags.is_empty() {
+                    Line::from(Span::styled(format!("  #{}", plugin.tags.join("  #")), Style::default().fg(FG_DIM)))
+                } else { Line::from("") },
+                    Line::from(""),
+                    if is_installed {
+                        Line::from(Span::styled("  [ Enter → Odinstaluj ]", Style::default().fg(ERR).add_modifier(Modifier::BOLD)))
+                    } else {
+                        Line::from(Span::styled("  [ Enter → Pobierz i zainstaluj .hk ]", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)))
+                    },
+            ];
+            f.render_widget(
+                Paragraph::new(detail_lines).wrap(Wrap { trim: false }).style(Style::default().bg(BG)),
+                            content_chunks[1],
+            );
+        }
     }
 
-    // Status line
-    let status = Paragraph::new(Line::from(vec![
-        Span::styled(format!("  {}", market.status_msg), Style::default().fg(FG_DIM)),
-    ])).style(Style::default().bg(BG2));
-    f.render_widget(status, chunks[3]);
+    // ── Status ──
+    let status_style = if market.status_msg.starts_with("ERR") || market.status_msg.starts_with("Błąd") {
+        Style::default().fg(ERR).bg(BG2)
+    } else if market.status_msg.starts_with("OK") {
+        Style::default().fg(Color::Rgb(0,200,100)).bg(BG2)
+    } else {
+        Style::default().fg(FG_DIM).bg(BG2)
+    };
+    f.render_widget(
+        Paragraph::new(Span::styled(format!("  {}", market.status_msg), status_style))
+        .style(Style::default().bg(BG2)),
+                    chunks[3],
+    );
 
-    // Hotkeys bar
-    let keys = Paragraph::new(Line::from(vec![
-        Span::styled("  Tab/Shift+Tab ", Style::default().fg(ACCENT)), Span::styled("switch category  ", Style::default().fg(FG_DIM)),
-                                         Span::styled("↑↓ ", Style::default().fg(ACCENT)), Span::styled("navigate  ", Style::default().fg(FG_DIM)),
-                                         Span::styled("Enter ", Style::default().fg(ACCENT)), Span::styled("install/uninstall  ", Style::default().fg(FG_DIM)),
-                                         Span::styled("Esc ", Style::default().fg(ACCENT)), Span::styled("back  ", Style::default().fg(FG_DIM)),
-    ])).style(Style::default().bg(BG2));
-    f.render_widget(keys, chunks[4]);
+    // ── Klawisze ──
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("  Tab/Shift+Tab ", Style::default().fg(ACCENT)),
+                                  Span::styled("kategoria  ", Style::default().fg(FG_DIM)),
+                                  Span::styled("↑↓ ", Style::default().fg(ACCENT)),
+                                  Span::styled("nawiguj  ", Style::default().fg(FG_DIM)),
+                                  Span::styled("Enter ", Style::default().fg(ACCENT)),
+                                  Span::styled("instaluj/odinstaluj  ", Style::default().fg(FG_DIM)),
+                                  Span::styled("litery ", Style::default().fg(ACCENT)),
+                                  Span::styled("filtruj  ", Style::default().fg(FG_DIM)),
+                                  Span::styled("Esc ", Style::default().fg(ACCENT)),
+                                  Span::styled("wróć", Style::default().fg(FG_DIM)),
+        ])).style(Style::default().bg(BG2)),
+                    chunks[4],
+    );
 }
+
 
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 fn bool_str(b: bool) -> String {
-    if b { "✓ tak".to_string() } else { "✗ nie".to_string() }
+    if b { "OK tak".to_string() } else { "ERR nie".to_string() }
 }
 
 fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
@@ -792,7 +806,7 @@ fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_widget(
         Paragraph::new(Line::from(vec![
-            Span::styled("  ⚙ hdev Settings", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
+            Span::styled("   hdev Settings", Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)),
                                   Span::styled("   — stored in ~/.cache/HackerOS/hdev/config.json", Style::default().fg(FG_DIM)),
         ])).style(Style::default().bg(BG2)),
                     chunks[0],
@@ -816,6 +830,7 @@ fn draw_settings(f: &mut Frame, area: Rect, app: &App) {
         SettingRow { label: "  Drzewo plików",         value: bool_str(cfg.show_file_tree),                          editable: true,  hint: "←→ toggle" },
         SettingRow { label: "  Zawijanie linii",       value: bool_str(cfg.word_wrap),                               editable: true,  hint: "←→ toggle" },
         SettingRow { label: "  Domyślny język",        value: format!("{}", cfg.default_language_override),          editable: true,  hint: "←→ zmień" },
+        SettingRow { label: "  Autocomplete (Tab)",   value: bool_str(cfg.autocomplete_enabled),                           editable: true,  hint: "←→ toggle" },
         // Sekcja Terminal
         SettingRow { label: "── Terminal ────────────────────────", value: String::new(), editable: false, hint: "" },
         SettingRow { label: "  Shell",                 value: cfg.terminal_shell.clone(),                            editable: false, hint: "" },
@@ -1028,7 +1043,7 @@ fn draw_search_bar(f: &mut Frame, area: Rect, app: &App) {
     .border_type(BorderType::Rounded)
     .border_style(Style::default().fg(WARN))
     .title(Line::from(vec![
-        Span::styled(format!(" 🔍 {}/{} ", idx, count), Style::default().fg(WARN)),
+        Span::styled(format!("  {}/{} ", idx, count), Style::default().fg(WARN)),
     ]))
     .style(Style::default().bg(BG3));
 
@@ -1066,7 +1081,7 @@ fn draw_confirm_dialog(f: &mut Frame, area: Rect, app: &App) {
     .borders(Borders::ALL)
     .border_type(BorderType::Rounded)
     .border_style(Style::default().fg(ERR))
-    .title(Line::from(Span::styled(" ⚠ Confirm Delete ", Style::default().fg(ERR).add_modifier(Modifier::BOLD))))
+    .title(Line::from(Span::styled(" WARN Confirm Delete ", Style::default().fg(ERR).add_modifier(Modifier::BOLD))))
     .style(Style::default().bg(BG3));
 
     let inner = block.inner(dialog);
@@ -1083,6 +1098,84 @@ fn draw_confirm_dialog(f: &mut Frame, area: Rect, app: &App) {
         ]),
     ];
     f.render_widget(Paragraph::new(content), inner);
+}
+
+
+// ─── AUTOCOMPLETE POPUP ───────────────────────────────────────────────────────
+fn draw_autocomplete(f: &mut Frame, area: Rect, app: &App) {
+    let ac = &app.autocomplete;
+    if ac.items.is_empty() { return; }
+
+    // Znajdź pozycję kursora na ekranie
+    let (cur_screen_row, cur_screen_col) = if let Some(buf) = app.current_buffer() {
+        let tree_w = if app.show_file_tree { 28u16 } else { 0u16 };
+        let ln_w   = (format!("{}", buf.lines.len()).len() as u16 + 2).max(4);
+        let col    = tree_w + ln_w + (buf.cursor_col - buf.scroll_col) as u16;
+        // +1 title, +2 tabs, +1 border
+        let row    = 3u16 + (buf.cursor_row - buf.scroll_row) as u16 + 1;
+        (row, col)
+    } else { return; };
+
+    let max_label  = ac.items.iter().map(|i| i.label.len() + i.detail.len() + 6).max().unwrap_or(30);
+    let popup_w    = (max_label as u16 + 4).min(50).max(28);
+    let popup_h    = (ac.items.len() as u16 + 2).min(12);
+
+    // Wybierz pozycję popup: pod kursorem lub nad
+    let popup_y = if cur_screen_row + popup_h + 1 < area.height {
+        cur_screen_row + 1
+    } else {
+        cur_screen_row.saturating_sub(popup_h)
+    };
+    let popup_x = cur_screen_col.min(area.width.saturating_sub(popup_w));
+
+    let popup_area = Rect {
+        x: popup_x, y: popup_y,
+        width: popup_w, height: popup_h,
+    };
+
+    f.render_widget(Clear, popup_area);
+
+    let block = Block::default()
+    .borders(Borders::ALL)
+    .border_type(BorderType::Rounded)
+    .border_style(Style::default().fg(BORDER_ACTIVE))
+    .style(Style::default().bg(BG3));
+
+    let inner = block.inner(popup_area);
+    f.render_widget(block, popup_area);
+
+    let items: Vec<ratatui::widgets::ListItem> = ac.items.iter().enumerate().map(|(i, item)| {
+        let is_sel = i == ac.selected;
+        let item_bg = if is_sel { Color::Rgb(30, 50, 70) } else { BG3 };
+        let item_fg = if is_sel { ACCENT } else { FG };
+
+        let kind_color = item.kind.color();
+        let kind_icon  = item.kind.icon();
+
+        let label_w = inner.width.saturating_sub(item.detail.len() as u16 + 5) as usize;
+        let label_truncated = if item.label.len() > label_w {
+            format!("{}", &item.label[..label_w.saturating_sub(1)])
+        } else {
+            item.label.clone()
+        };
+
+        let line = ratatui::text::Line::from(vec![
+            Span::styled(format!("{} ", kind_icon), Style::default().fg(kind_color).bg(item_bg)),
+                                             Span::styled(format!("{:<w$}", label_truncated, w = label_w), Style::default().fg(item_fg).bg(item_bg)),
+                                             Span::styled(format!(" {}", item.detail), Style::default().fg(FG_DIM).bg(item_bg)),
+        ]).style(Style::default().bg(item_bg));
+
+        ratatui::widgets::ListItem::new(line)
+    }).collect();
+
+    let mut state = ratatui::widgets::ListState::default();
+    state.select(Some(ac.selected));
+
+    f.render_stateful_widget(
+        ratatui::widgets::List::new(items),
+                             inner,
+                             &mut state,
+    );
 }
 
 fn draw_help_overlay(f: &mut Frame, area: Rect) {
