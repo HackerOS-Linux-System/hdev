@@ -148,19 +148,19 @@ impl App {
             focus_terminal: false,
             input_mode: InputMode::Normal,
             dialog_input: String::new(),
-           status_msg: String::new(),
-           status_kind: StatusKind::Info,
-           status_time: Instant::now(),
-           show_help: false,
-           show_confirm_delete: false,
-           settings_selected: 0,
-           quit: false,
-           config: config.clone(),
-           autocomplete: {
-               let mut ac = Autocomplete::new();
-               ac.enabled = config.autocomplete_enabled;
-               ac
-           },
+            status_msg: String::new(),
+            status_kind: StatusKind::Info,
+            status_time: Instant::now(),
+            show_help: false,
+            show_confirm_delete: false,
+            settings_selected: 0,
+            quit: false,
+            config: config.clone(),
+            autocomplete: {
+                let mut ac = Autocomplete::new();
+                ac.enabled = config.autocomplete_enabled;
+                ac
+            },
         })
     }
 
@@ -198,14 +198,14 @@ impl App {
             // Auto-reset statusu po 4 sekundach (nie dla błędów)
             if self.status_time.elapsed() > Duration::from_secs(4)
                 && self.status_kind != StatusKind::Error
-                {
-                    self.status_msg  = self.default_status();
-                    self.status_kind = StatusKind::Info;
-                    // Reset zegara na 9999s żeby nie resetować w kółko
-                    self.status_time = Instant::now() + Duration::from_secs(9999);
-                }
+            {
+                self.status_msg  = self.default_status();
+                self.status_kind = StatusKind::Info;
+                // Reset zegara na 9999s żeby nie resetować w kółko
+                self.status_time = Instant::now() + Duration::from_secs(9999);
+            }
 
-                if self.quit { break; }
+            if self.quit { break; }
         }
 
         self.save_session();
@@ -216,14 +216,14 @@ impl App {
 
     fn save_session(&self) {
         let open_files: Vec<String> = self.buffers.iter()
-        .filter_map(|b| b.path.as_ref().map(|p| p.to_string_lossy().to_string()))
-        .collect();
+            .filter_map(|b| b.path.as_ref().map(|p| p.to_string_lossy().to_string()))
+            .collect();
         let term_hist = self.terminal.cmd_history.clone();
         let session = SessionData {
             open_files,
             active_file: self.current_buffer()
-            .and_then(|b| b.path.as_ref())
-            .map(|p| p.to_string_lossy().to_string()),
+                .and_then(|b| b.path.as_ref())
+                .map(|p| p.to_string_lossy().to_string()),
             panel_state: "editor".to_string(),
             terminal_history: term_hist,
         };
@@ -594,49 +594,150 @@ impl App {
 
     // ── Dialog inputs ─────────────────────────────────────────────────────────
     fn handle_dialog_input(&mut self, key: KeyEvent) {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
+            // Esc - ZAWSZE zamknij dialog i wróć do normalnego trybu
             KeyCode::Esc => {
                 self.input_mode = InputMode::Normal;
                 self.dialog_input.clear();
+                self.set_status("Anulowano.", StatusKind::Info);
             }
+
+            // Enter - zatwierdź
             KeyCode::Enter => {
-                let input = self.dialog_input.clone();
-                let mode = std::mem::replace(&mut self.input_mode, InputMode::Normal);
+                let input = self.dialog_input.trim().to_string();
+                let mode  = self.input_mode.clone();
+                self.input_mode = InputMode::Normal;
                 self.dialog_input.clear();
+
+                if input.is_empty() {
+                    self.set_status("Anulowano — puste wejście.", StatusKind::Warn);
+                    return;
+                }
+
                 match mode {
-                    InputMode::NewFileName => {
-                        match self.file_tree.create_file(&input) {
-                            Ok(path) => {
-                                match EditorBuffer::from_file(path) {
-                                    Ok(buf) => {
-                                        self.buffers.push(buf);
-                                        self.active_buffer = self.buffers.len() - 1;
-                                        self.set_status(&format!("Utworzono: {}", input), StatusKind::Ok);
-                                    }
-                                    Err(e) => self.set_status(&format!("Błąd: {}", e), StatusKind::Error),
-                                }
-                            }
-                            Err(e) => self.set_status(&format!("Błąd: {}", e), StatusKind::Error),
-                        }
-                    }
-                    InputMode::SaveAs => {
-                        let pb = std::path::PathBuf::from(&input);
-                        if let Some(buf) = self.current_buffer_mut() {
-                            match buf.save_as(pb) {
-                                Ok(_) => self.set_status(&format!("Zapisano jako: {}", input), StatusKind::Ok),
-                                Err(e) => self.set_status(&format!("Błąd: {}", e), StatusKind::Error),
-                            }
-                        }
-                    }
-                    InputMode::OpenPath => {
-                        self.open_path_str(&input);
-                    }
+                    InputMode::NewFileName => self.do_create_file(&input),
+                    InputMode::SaveAs      => self.do_save_as(&input),
+                    InputMode::OpenPath    => self.open_path_str(&input),
                     _ => {}
                 }
             }
-            KeyCode::Backspace => { self.dialog_input.pop(); }
-            KeyCode::Char(c)   => { self.dialog_input.push(c); }
+
+            // Backspace - usuń ostatni znak
+            KeyCode::Backspace => {
+                self.dialog_input.pop();
+            }
+
+            // Delete - usuń znak na pozycji kursora (uproszczone: usuń ostatni)
+            KeyCode::Delete => {
+                self.dialog_input.pop();
+            }
+
+            // Ctrl+A - zaznacz wszystko (wyczyść pole)
+            KeyCode::Char('a') if ctrl => {
+                self.dialog_input.clear();
+            }
+
+            // Ctrl+U - wyczyść pole
+            KeyCode::Char('u') if ctrl => {
+                self.dialog_input.clear();
+            }
+
+            // Zwykłe znaki - dopisuj do dialog_input
+            KeyCode::Char(c) if !ctrl => {
+                self.dialog_input.push(c);
+            }
+
+            // Tab - autouzupełnij ścieżkę (dla OpenPath)
+            KeyCode::Tab => {
+                if self.input_mode == InputMode::OpenPath {
+                    self.autocomplete_path();
+                }
+            }
+
             _ => {}
+        }
+    }
+
+    /// Utwórz nowy plik w katalogu wybranym w drzewie
+    fn do_create_file(&mut self, name: &str) {
+        // Wyznacz katalog docelowy z drzewa plików
+        let target_dir = self.file_tree.selected_dir_path()
+            .or_else(|| self.file_tree.root.clone())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+
+        let new_path = target_dir.join(name);
+
+        // Utwórz plik (i brakujące katalogi nadrzędne)
+        if let Some(parent) = new_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        match std::fs::File::create(&new_path) {
+            Ok(_) => {
+                // Otwórz w edytorze
+                match EditorBuffer::from_file(new_path.clone()) {
+                    Ok(buf) => {
+                        self.config.add_recent_file(&new_path.to_string_lossy());
+                        self.buffers.push(buf);
+                        self.active_buffer = self.buffers.len() - 1;
+                        self.file_tree.refresh();
+                        self.set_status(
+                            &format!("Utworzono: {}", new_path.display()),
+                            StatusKind::Ok,
+                        );
+                    }
+                    Err(e) => self.set_status(&format!("Błąd otwarcia: {}", e), StatusKind::Error),
+                }
+            }
+            Err(e) => self.set_status(&format!("Błąd tworzenia pliku: {}", e), StatusKind::Error),
+        }
+    }
+
+    /// Zapisz jako — zmień ścieżkę aktualnego bufora
+    fn do_save_as(&mut self, path_str: &str) {
+        let pb = PathBuf::from(path_str);
+        if let Some(buf) = self.current_buffer_mut() {
+            match buf.save_as(pb) {
+                Ok(_)  => self.set_status(&format!("Zapisano jako: {}", path_str), StatusKind::Ok),
+                Err(e) => self.set_status(&format!("Błąd zapisu: {}", e), StatusKind::Error),
+            }
+        }
+    }
+
+    /// Prosta autouzupełnialnia ścieżki przez Tab
+    fn autocomplete_path(&mut self) {
+        let input = self.dialog_input.clone();
+        let path  = PathBuf::from(&input);
+
+        // Jeśli ścieżka kończy się separatorem lub jest katalogiem — pokaż zawartość
+        let (dir, prefix) = if input.ends_with('/') || input.ends_with('\\') {
+            (path.clone(), String::new())
+        } else {
+            let parent = path.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+            let file   = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+            (parent, file)
+        };
+
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            let mut matches: Vec<String> = entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|n| n.starts_with(&prefix) && !n.starts_with('.'))
+                .collect();
+            matches.sort();
+
+            if let Some(first) = matches.first() {
+                let mut completed = dir.join(first).to_string_lossy().to_string();
+                // Dodaj / jeśli to katalog
+                if PathBuf::from(&completed).is_dir() {
+                    completed.push('/');
+                }
+                self.dialog_input = completed;
+            }
         }
     }
 
@@ -803,7 +904,7 @@ impl App {
                 if !self.config.autocomplete_enabled { self.autocomplete.close(); }
                 self.set_status(
                     &format!("Autocomplete: {}", if self.config.autocomplete_enabled { "włączone" } else { "wyłączone" }),
-                                StatusKind::Info
+                    StatusKind::Info
                 );
             }
             _ => {}
@@ -820,7 +921,7 @@ impl App {
         self.dialog_input.clear();
         // Pokaż aktualny katalog docelowy
         let target_dir = self.file_tree.selected_dir_path()
-        .unwrap_or_else(|| self.file_tree.root.clone().unwrap_or_default());
+            .unwrap_or_else(|| self.file_tree.root.clone().unwrap_or_default());
         self.set_status(&format!("Nowy plik w: {}  (wpisz nazwę)", target_dir.display()), StatusKind::Info);
     }
 
@@ -847,11 +948,14 @@ impl App {
 
     fn cmd_open_path(&mut self) {
         self.input_mode = InputMode::OpenPath;
-        // Wstaw aktualny katalog jako domyślny
+        // Zacznij od aktualnego katalogu jako placeholder — użytkownik wpisuje ścieżkę
         let cwd = self.file_tree.root.clone()
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        self.dialog_input = cwd.to_string_lossy().to_string();
-        self.set_status("Otwórz plik lub folder (edytuj ścieżkę, Enter potwierdź):", StatusKind::Info);
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        // Ustaw tylko katalog bazowy z / na końcu — użytkownik uzupełnia
+        let mut base = cwd.to_string_lossy().to_string();
+        if !base.ends_with('/') { base.push('/'); }
+        self.dialog_input = base;
+        self.set_status("Wpisz sciezke pliku lub folderu. Tab = autouzupelnianie. Esc = anuluj", StatusKind::Info);
     }
 
     fn cmd_delete_file(&mut self) {
