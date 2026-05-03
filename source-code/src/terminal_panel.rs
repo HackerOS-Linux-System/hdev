@@ -145,7 +145,7 @@ impl TerminalPanel {
                 if !stderr.trim_end().is_empty() { self.push_error(&stderr); }
                 if stdout.trim().is_empty() && stderr.trim().is_empty() {
                     if out.status.success() {
-                        self.push_info("✓");
+                        self.push_info("OK");
                     } else {
                         self.push_error(&format!("exit {}", out.status.code().unwrap_or(-1)));
                     }
