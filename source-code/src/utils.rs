@@ -29,36 +29,35 @@ pub fn format_file_size(bytes: u64) -> String {
 pub fn file_icon(path: &Path) -> &'static str {
     if path.is_dir() { return "▸ "; }
     match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
-        "rs"   => "🦀",
-        "py"   => "🐍",
-        "js" | "ts" => "📜",
-        "html" => "🌐",
-        "css"  => "🎨",
-        "json" => "📋",
-        "toml" | "yaml" | "yml" => "⚙",
-        "hl" | "hlpp" => "◈",
-        "hs"   => "◆",
-        "hk"   => "◎",
-        "go"   => "🐹",
-        "c" | "cpp" | "h" | "hpp" => "⚡",
-        "sh" | "bash" => "❯",
-        "md"   => "📝",
-        "txt"  => "📄",
-        "lua"  => "🌙",
-        "nim"  => "👑",
-        "kt"   => "◆",
-        "java" => "☕",
-        "dart" => "🎯",
-        "cr"   => "💎",
-        "odin" => "◈",
-        "vala" => "◆",
+        "rs"   => "rs",
+        "py"   => "py",
+        "js" | "ts" => "js",
+        "html" => "ht",
+        "css"  => "cs",
+        "json" => "jn",
+        "toml" | "yaml" | "yml" => "cf",
+        "hl" | "hlpp" => "hl",
+        "hs"   => "kt",
+        "hk"   => "hk",
+        "go"   => "go",
+        "c" | "cpp" | "h" | "hpp" => "c ",
+        "sh" | "bash" => ">>",
+        "md"   => "md",
+        "txt"  => "tx",
+        "lua"  => "lu",
+        "nim"  => "ni",
+        "kt"   => "kt",
+        "java" => "jv",
+        "dart" => "dt",
+        "cr"   => "cr",
+        "odin" => "hl",
+        "vala" => "kt",
         _      => "  ",
     }
 }
 
 pub fn stars(rating: f32) -> String {
     let full = rating.floor() as usize;
-    let half = if rating - rating.floor() >= 0.5 { 1 } else { 0 };
-    let empty = 5 - full - half;
-    format!("{}{}{}", "★".repeat(full), if half == 1 { "½" } else { "" }, "☆".repeat(empty))
+    let empty = 5 - full.min(5);
+    format!("{}{}",  "*".repeat(full), ".".repeat(empty))
 }
