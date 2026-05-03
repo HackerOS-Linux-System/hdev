@@ -14,9 +14,9 @@ pub struct FileNode {
 impl FileNode {
     pub fn new(path: PathBuf, depth: usize) -> Self {
         let name = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("?")
-            .to_string();
+        .and_then(|n| n.to_str())
+        .unwrap_or("?")
+        .to_string();
         let is_dir = path.is_dir();
         Self { path, name, is_dir, depth, expanded: false, children: Vec::new() }
     }
@@ -160,5 +160,17 @@ impl FileTree {
             self.refresh();
         }
         Ok(())
+    }
+}
+
+impl FileTree {
+    /// Zwróć katalog aktualnie wybranego elementu
+    pub fn selected_dir_path(&self) -> Option<std::path::PathBuf> {
+        let path = self.selected_path()?;
+        if path.is_dir() {
+            Some(path)
+        } else {
+            path.parent().map(|p| p.to_path_buf())
+        }
     }
 }
