@@ -1,124 +1,153 @@
 use ratatui::style::Color;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
-pub struct Plugin {
-    pub id: String,
-    pub name: String,
+// ── Typy danych ───────────────────────────────────────────────────────────────
+
+/// Wpis z pliku marketplace.json
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketplacePlugin {
+    pub name:        String,
     pub description: String,
-    pub version: String,
-    pub author: String,
-    pub category: PluginCategory,
-    pub installed: bool,
-    pub rating: f32,
-    pub downloads: u64,
-    pub tags: Vec<String>,
+    pub download:    String,   // URL do pliku .hk
+    #[serde(default)]
+    pub author:      String,
+    #[serde(default)]
+    pub version:     String,
+    #[serde(default)]
+    pub category:    String,
+    #[serde(default)]
+    pub tags:        Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum PluginCategory {
-    Language,
-    Theme,
-    Formatter,
-    Linter,
-    Git,
-    Productivity,
-    HackerOS,
-    Other,
-}
+impl MarketplacePlugin {
+    pub fn is_installed(&self, installed: &[String]) -> bool {
+        installed.iter().any(|i| i == &self.name)
+    }
 
-impl PluginCategory {
-    pub fn display(&self) -> &'static str {
-        match self {
-            PluginCategory::Language    => "Language",
-            PluginCategory::Theme       => "Theme",
-            PluginCategory::Formatter   => "Formatter",
-            PluginCategory::Linter      => "Linter",
-            PluginCategory::Git         => "Git",
-            PluginCategory::Productivity=> "Productivity",
-            PluginCategory::HackerOS    => "HackerOS",
-            PluginCategory::Other       => "Other",
+    pub fn category_color(&self) -> Color {
+        match self.category.to_lowercase().as_str() {
+            "language" | "lang"   => Color::Rgb(80,  200, 255),
+            "theme"                => Color::Rgb(200, 100, 255),
+            "formatter"            => Color::Rgb(100, 255, 100),
+            "linter"               => Color::Rgb(255, 220, 50),
+            "git"                  => Color::Rgb(255, 100, 50),
+            "productivity"         => Color::Rgb(100, 220, 180),
+            "hackeros"             => Color::Rgb(0,   255, 100),
+            _                      => Color::Rgb(160, 160, 160),
         }
     }
-    pub fn color(&self) -> Color {
-        match self {
-            PluginCategory::Language    => Color::Rgb(80, 200, 255),
-            PluginCategory::Theme       => Color::Rgb(200, 100, 255),
-            PluginCategory::Formatter   => Color::Rgb(100, 255, 100),
-            PluginCategory::Linter      => Color::Rgb(255, 220, 50),
-            PluginCategory::Git         => Color::Rgb(255, 100, 50),
-            PluginCategory::Productivity=> Color::Rgb(100, 220, 180),
-            PluginCategory::HackerOS    => Color::Rgb(0, 255, 100),
-            PluginCategory::Other       => Color::Gray,
-        }
+
+    pub fn category_display(&self) -> String {
+        if self.category.is_empty() { "plugin".to_string() } else { self.category.clone() }
     }
 }
 
-pub struct Marketplace {
-    pub plugins: Vec<Plugin>,
-    pub selected: usize,
-    pub filter: String,
-    pub tab: MarketplaceTab,
-    pub status_msg: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MarketplaceJson {
+    marketplace: Vec<MarketplacePlugin>,
 }
+
+// ── Stany ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MarketplaceTab {
     All,
     Installed,
-    HackerOS,
-    Languages,
-    Themes,
+    NotInstalled,
 }
 
 impl MarketplaceTab {
     pub fn all() -> Vec<Self> {
-        vec![
-            MarketplaceTab::All,
-            MarketplaceTab::Installed,
-            MarketplaceTab::HackerOS,
-            MarketplaceTab::Languages,
-            MarketplaceTab::Themes,
-        ]
+        vec![Self::All, Self::Installed, Self::NotInstalled]
     }
-    pub fn display(&self) -> &'static str {
+    pub fn label(&self) -> &'static str {
         match self {
-            MarketplaceTab::All       => " All ",
-            MarketplaceTab::Installed => " Installed ",
-            MarketplaceTab::HackerOS  => " HackerOS ",
-            MarketplaceTab::Languages => " Languages ",
-            MarketplaceTab::Themes    => " Themes ",
+            Self::All          => " Wszystkie ",
+            Self::Installed    => " Zainstalowane ",
+            Self::NotInstalled => " Dostępne ",
         }
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum MarketplaceState {
+    Browsing,
+    Downloading { name: String, progress: u8 },
+    Error(String),
+}
+
+pub struct Marketplace {
+    pub plugins:    Vec<MarketplacePlugin>,
+    pub installed:  Vec<String>,        // nazwy zainstalowanych
+    pub selected:   usize,
+    pub tab:        MarketplaceTab,
+    pub filter:     String,
+    pub state:      MarketplaceState,
+    pub status_msg: String,
+    pub json_url:   String,
+    pub loaded:     bool,
+}
+
 impl Marketplace {
     pub fn new() -> Self {
-        let plugins = placeholder_plugins();
         Self {
-            plugins,
-            selected: 0,
-            filter: String::new(),
-            tab: MarketplaceTab::All,
-            status_msg: "hdev Marketplace — Plugin support coming soon!".to_string(),
+            plugins:    Vec::new(),
+            installed:  Vec::new(),
+            selected:   0,
+            tab:        MarketplaceTab::All,
+            filter:     String::new(),
+            state:      MarketplaceState::Browsing,
+            status_msg: "Ładowanie listy pluginów...".to_string(),
+            json_url:   "https://raw.githubusercontent.com/HackerOS-Linux-System/hdev/main/community/marketplace.json".to_string(),
+            loaded:     false,
         }
     }
 
-    pub fn visible_plugins(&self) -> Vec<&Plugin> {
+    /// Załaduj marketplace.json z URL lub fallback lokalny
+    pub fn load_from_url(&mut self) {
+        // Próbuj curl/wget do pobrania JSON
+        let json = try_fetch_json(&self.json_url);
+        match json {
+            Some(data) => self.parse_json(&data),
+            None => {
+                // Fallback — przykładowe dane gdy brak internetu
+                self.plugins = fallback_plugins();
+                self.status_msg = "Brak połączenia — wyświetlam przykładowe dane. Sprawdź internet.".to_string();
+                self.loaded = true;
+            }
+        }
+    }
+
+    /// Parsuj JSON z marketplace
+    pub fn parse_json(&mut self, json: &str) {
+        match serde_json::from_str::<MarketplaceJson>(json) {
+            Ok(data) => {
+                self.plugins    = data.marketplace;
+                self.status_msg = format!("Załadowano {} pluginów z marketplace.", self.plugins.len());
+                self.loaded     = true;
+            }
+            Err(e) => {
+                self.plugins    = fallback_plugins();
+                self.status_msg = format!("Błąd parsowania JSON: {}. Fallback.", e);
+                self.loaded     = true;
+            }
+        }
+    }
+
+    pub fn visible_plugins(&self) -> Vec<&MarketplacePlugin> {
         self.plugins.iter().filter(|p| {
-            let tab_match = match &self.tab {
-                MarketplaceTab::All => true,
-                MarketplaceTab::Installed => p.installed,
-                MarketplaceTab::HackerOS => p.category == PluginCategory::HackerOS,
-                MarketplaceTab::Languages => p.category == PluginCategory::Language,
-                MarketplaceTab::Themes => p.category == PluginCategory::Theme,
+            let tab_ok = match &self.tab {
+                MarketplaceTab::All          => true,
+                MarketplaceTab::Installed    => p.is_installed(&self.installed),
+                                   MarketplaceTab::NotInstalled => !p.is_installed(&self.installed),
             };
-            let filter_match = if self.filter.is_empty() {
-                true
-            } else {
-                p.name.to_lowercase().contains(&self.filter.to_lowercase())
-                || p.description.to_lowercase().contains(&self.filter.to_lowercase())
+            let filter_ok = if self.filter.is_empty() { true } else {
+                let f = self.filter.to_lowercase();
+                p.name.to_lowercase().contains(&f)
+                || p.description.to_lowercase().contains(&f)
+                || p.category.to_lowercase().contains(&f)
             };
-            tab_match && filter_match
+            tab_ok && filter_ok
         }).collect()
     }
 
@@ -131,145 +160,146 @@ impl Marketplace {
         if self.selected + 1 < len { self.selected += 1; }
     }
 
-    pub fn toggle_install(&mut self) {
-        let visible: Vec<String> = self.visible_plugins().iter().map(|p| p.id.clone()).collect();
-        if let Some(id) = visible.get(self.selected) {
-            if let Some(plugin) = self.plugins.iter_mut().find(|p| &p.id == id) {
-                if plugin.installed {
-                    plugin.installed = false;
-                    self.status_msg = format!("⊖ Uninstalled: {} (placeholder — restart required)", plugin.name);
-                } else {
-                    plugin.installed = true;
-                    self.status_msg = format!("⊕ Installed: {} (placeholder — restart required)", plugin.name);
-                }
-            }
-        }
-    }
-
     pub fn next_tab(&mut self) {
         let tabs = MarketplaceTab::all();
-        let idx = tabs.iter().position(|t| t == &self.tab).unwrap_or(0);
-        self.tab = tabs[(idx + 1) % tabs.len()].clone();
+        let idx  = tabs.iter().position(|t| t == &self.tab).unwrap_or(0);
+        self.tab      = tabs[(idx + 1) % tabs.len()].clone();
         self.selected = 0;
     }
 
     pub fn prev_tab(&mut self) {
         let tabs = MarketplaceTab::all();
-        let idx = tabs.iter().position(|t| t == &self.tab).unwrap_or(0);
-        self.tab = tabs[(idx + tabs.len() - 1) % tabs.len()].clone();
+        let idx  = tabs.iter().position(|t| t == &self.tab).unwrap_or(0);
+        self.tab      = tabs[(idx + tabs.len() - 1) % tabs.len()].clone();
         self.selected = 0;
+    }
+
+    /// Zainstaluj wybrany plugin (.hk pobrany z download URL)
+    pub fn install_selected(&mut self) -> Result<String, String> {
+        let visible: Vec<String> = self.visible_plugins().iter().map(|p| p.name.clone()).collect();
+        let name = match visible.get(self.selected) {
+            Some(n) => n.clone(),
+            None    => return Err("Brak wybranego pluginu.".to_string()),
+        };
+
+        if self.installed.contains(&name) {
+            // Odinstaluj
+            self.installed.retain(|n| n != &name);
+            let plugin_path = crate::config::HdevConfig::plugins_dir().join(format!("{}.hk", name));
+            let _ = std::fs::remove_file(&plugin_path);
+            self.status_msg = format!("Odinstalowano: {}", name);
+            return Ok(format!("Odinstalowano: {}", name));
+        }
+
+        // Pobierz URL pluginu
+        let url = match self.plugins.iter().find(|p| p.name == name) {
+            Some(p) => p.download.clone(),
+            None    => return Err("Plugin nie znaleziony.".to_string()),
+        };
+
+        // Pobierz plik .hk
+        let plugin_dir = crate::config::HdevConfig::plugins_dir();
+        let _ = std::fs::create_dir_all(&plugin_dir);
+        let dest = plugin_dir.join(format!("{}.hk", sanitize_name(&name)));
+
+        match download_file(&url, &dest) {
+            Ok(_) => {
+                self.installed.push(name.clone());
+                self.status_msg = format!("OK Zainstalowano: {}", name);
+                Ok(format!("Zainstalowano: {}", name))
+            }
+            Err(e) => {
+                self.status_msg = format!("ERR Błąd pobierania: {}", e);
+                Err(format!("Błąd: {}", e))
+            }
+        }
     }
 }
 
-fn placeholder_plugins() -> Vec<Plugin> {
+// ── Pobieranie plików ─────────────────────────────────────────────────────────
+
+fn try_fetch_json(url: &str) -> Option<String> {
+    // Próbuj curl
+    let curl = std::process::Command::new("curl")
+    .args(["-s", "--max-time", "8", "--fail", url])
+    .output();
+
+    if let Ok(out) = curl {
+        if out.status.success() {
+            let body = String::from_utf8_lossy(&out.stdout).to_string();
+            if !body.trim().is_empty() && body.trim().starts_with('{') {
+                return Some(body);
+            }
+        }
+    }
+
+    // Próbuj wget
+    let wget = std::process::Command::new("wget")
+    .args(["-q", "-O", "-", "--timeout=8", url])
+    .output();
+
+    if let Ok(out) = wget {
+        if out.status.success() {
+            let body = String::from_utf8_lossy(&out.stdout).to_string();
+            if !body.trim().is_empty() {
+                return Some(body);
+            }
+        }
+    }
+
+    None
+}
+
+fn download_file(url: &str, dest: &std::path::Path) -> Result<(), String> {
+    let dest_str = dest.to_string_lossy().to_string();
+
+    // Próbuj curl
+    let curl = std::process::Command::new("curl")
+    .args(["-s", "--max-time", "30", "--fail", "-o", &dest_str, url])
+    .status();
+
+    if let Ok(s) = curl {
+        if s.success() { return Ok(()); }
+    }
+
+    // Próbuj wget
+    let wget = std::process::Command::new("wget")
+    .args(["-q", "-O", &dest_str, url])
+    .status();
+
+    if let Ok(s) = wget {
+        if s.success() { return Ok(()); }
+    }
+
+    Err(format!("Nie można pobrać: {}. Sprawdź curl lub wget i połączenie.", url))
+}
+
+fn sanitize_name(name: &str) -> String {
+    name.chars()
+    .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect()
+}
+
+/// Dane przykładowe gdy brak internetu
+fn fallback_plugins() -> Vec<MarketplacePlugin> {
     vec![
-        Plugin {
-            id: "hl-support".to_string(),
-            name: "Hacker Lang Enhanced".to_string(),
-            description: "Advanced Hacker Lang support: snippets, REPL integration, linter overlay.".to_string(),
-            version: "1.0.0".to_string(),
-            author: "HackerOS Team".to_string(),
-            category: PluginCategory::HackerOS,
-            installed: false,
-            rating: 5.0,
-            downloads: 1200,
-            tags: vec!["hacker-lang".to_string(), "hl".to_string()],
+        MarketplacePlugin {
+            name:        "hl-enhanced".to_string(),
+            description: "Rozszerzone wsparcie Hacker Lang: snippety, linter, REPL.".to_string(),
+            download:    "https://raw.githubusercontent.com/HackerOS-Linux-System/hdev/main/community/plugins/hl-enhanced.hk".to_string(),
+            author:      "HackerOS Team".to_string(),
+            version:     "1.0.0".to_string(),
+            category:    "hackeros".to_string(),
+            tags:        vec!["hacker-lang".to_string()],
         },
-        Plugin {
-            id: "hsh-runner".to_string(),
-            name: "HSH Runner".to_string(),
-            description: "Run hsh scripts directly from hdev with one keystroke.".to_string(),
-            version: "0.9.0".to_string(),
-            author: "HackerOS Team".to_string(),
-            category: PluginCategory::HackerOS,
-            installed: false,
-            rating: 4.8,
-            downloads: 980,
-            tags: vec!["hsh".to_string(), "runner".to_string()],
-        },
-        Plugin {
-            id: "theme-matrix".to_string(),
-            name: "Matrix Theme".to_string(),
-            description: "Green-on-black matrix-inspired color scheme.".to_string(),
-            version: "2.1.0".to_string(),
-            author: "h4ck3r_th3m3r".to_string(),
-            category: PluginCategory::Theme,
-            installed: false,
-            rating: 4.5,
-            downloads: 3400,
-            tags: vec!["theme".to_string(), "dark".to_string()],
-        },
-        Plugin {
-            id: "git-integration".to_string(),
-            name: "Git Panel".to_string(),
-            description: "See git status, stage/unstage files, commit — all from hdev.".to_string(),
-            version: "1.3.0".to_string(),
-            author: "devtools_inc".to_string(),
-            category: PluginCategory::Git,
-            installed: false,
-            rating: 4.7,
-            downloads: 5600,
-            tags: vec!["git".to_string(), "vcs".to_string()],
-        },
-        Plugin {
-            id: "rust-analyzer-tui".to_string(),
-            name: "Rust Analyzer TUI".to_string(),
-            description: "Rust language server integration with inline diagnostics.".to_string(),
-            version: "0.4.2".to_string(),
-            author: "rust_tools".to_string(),
-            category: PluginCategory::Language,
-            installed: false,
-            rating: 4.9,
-            downloads: 8900,
-            tags: vec!["rust".to_string(), "lsp".to_string()],
-        },
-        Plugin {
-            id: "hsharp-tools".to_string(),
-            name: "H# Tools".to_string(),
-            description: "H# language support: formatter, snippet pack, type hints.".to_string(),
-            version: "0.2.0".to_string(),
-            author: "HackerOS Team".to_string(),
-            category: PluginCategory::HackerOS,
-            installed: false,
-            rating: 4.6,
-            downloads: 420,
-            tags: vec!["h#".to_string(), "hsharp".to_string()],
-        },
-        Plugin {
-            id: "autopairs".to_string(),
-            name: "Auto Pairs".to_string(),
-            description: "Automatically close brackets, quotes, and tags.".to_string(),
-            version: "1.1.0".to_string(),
-            author: "editor_tools".to_string(),
-            category: PluginCategory::Productivity,
-            installed: false,
-            rating: 4.8,
-            downloads: 12000,
-            tags: vec!["autopairs".to_string(), "brackets".to_string()],
-        },
-        Plugin {
-            id: "theme-cyberpunk".to_string(),
-            name: "Cyberpunk Theme".to_string(),
-            description: "Neon pink and cyan cyberpunk aesthetic.".to_string(),
-            version: "3.0.0".to_string(),
-            author: "neon_dev".to_string(),
-            category: PluginCategory::Theme,
-            installed: false,
-            rating: 4.3,
-            downloads: 2800,
-            tags: vec!["theme".to_string(), "cyberpunk".to_string()],
-        },
-        Plugin {
-            id: "hk-editor".to_string(),
-            name: "HK Plugin Editor".to_string(),
-            description: "Schema validation, autocompletion, and preview for .hk plugin files.".to_string(),
-            version: "0.1.0".to_string(),
-            author: "HackerOS Team".to_string(),
-            category: PluginCategory::HackerOS,
-            installed: false,
-            rating: 4.4,
-            downloads: 210,
-            tags: vec!["hk".to_string(), "plugins".to_string()],
+        MarketplacePlugin {
+            name:        "hsh-runner".to_string(),
+            description: "Uruchamiaj skrypty hsh bezpośrednio z edytora.".to_string(),
+            download:    "https://raw.githubusercontent.com/HackerOS-Linux-System/hdev/main/community/plugins/hsh-runner.hk".to_string(),
+            author:      "HackerOS Team".to_string(),
+            version:     "0.9.0".to_string(),
+            category:    "hackeros".to_string(),
+            tags:        vec!["hsh".to_string()],
         },
     ]
 }
