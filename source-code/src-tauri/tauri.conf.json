@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "hdev",
+  "version": "0.2.0",
+  "identifier": "os.hackeros.hdev",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "hdev",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 860,
+        "minHeight": 560,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "theme": "Dark",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: asset: https://asset.localhost; connect-src 'self' https: ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "rpm", "appimage"],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "category": "Development",
+    "shortDescription": "hdev — edytor kodu dla HackerOS",
+    "longDescription": "hdev laczy prostote notatnika z mozliwosciami IDE: podswietlanie skladni, zintegrowany terminal, drzewo plikow, marketplace pluginow."
+  },
+  "plugins": {}
+}
