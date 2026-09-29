@@ -1,1 +1,16 @@
+[package]
+-> name        => hdev
+-> version     => 0.1.0
+-> description => HackerOS developer tool: a TUI code editor + a GUI source browser for github.com/HackerOS-Linux-System
+-> author      => HackerOS Team
+-> license     => MIT
 
+[build]
+-> lang   => h#
+-> entry  => src/main.h#
+-> output => build/hdev
+
+[deps]
+-> tui    => bytes
+-> git    => bytes
+-> silver => bytes
