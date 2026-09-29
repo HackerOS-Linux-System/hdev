@@ -1,0 +1,418 @@
+mod github
+mod langs
+
+use "bit -> silver"    from "app"
+use "bit -> silver" from "dialog"
+use "std -> fs"        from "fs"
+use "std -> path"      from "path"
+use "std -> env"       from "env"
+use "std -> sync"      from "sync"
+
+;; Big enough for a "per_page=100" repo list or a large-ish directory
+;; listing; entries past this are simply not clickable (and the screen
+;; says so). Static because the command pool is created once, up front.
+fn item_pool() -> int is return 80 end
+
+fn sep() -> string is return "|~|" end
+
+;; ── cache locations ──────────────────────────────────────────────────
+
+fn cache_dir() -> string is
+    return path::join(env::home(), ".cache/hdev/gui")
+end
+fn view_file() -> string     is return path::join(cache_dir(), "view.txt") end
+fn repo_file() -> string     is return path::join(cache_dir(), "repo.txt") end
+fn path_file() -> string     is return path::join(cache_dir(), "path.txt") end
+fn cfile_file() -> string    is return path::join(cache_dir(), "current_file.txt") end
+fn repos_data() -> string    is return path::join(cache_dir(), "repos_data.txt") end
+fn entries_data() -> string  is return path::join(cache_dir(), "entries_data.txt") end
+fn content_data() -> string  is return path::join(cache_dir(), "content_data.txt") end
+fn message_file() -> string  is return path::join(cache_dir(), "message.txt") end
+
+fn read_or(p: string, default: string) -> string is
+    if !fs::exists(p) is return default end
+    return fs::read(p)
+end
+
+;; ── serializing GitHub's structs to/from the cache files ────────────
+
+fn save_repos(repos: [github::RepoInfo]) is
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < repos.len() is
+        let r: github::RepoInfo = repos[i]
+        out = out + r.name + sep() + r.full_name + sep() + r.language + sep()
+            + r.description + sep() + r.default_branch + sep()
+            + bool_str(r.fork) + sep() + bool_str(r.archived) + "\n"
+        i += 1
+    end
+    fs::write(repos_data(), out)
+end
+
+fn load_repos() -> [github::RepoInfo] is
+    let mut result: [github::RepoInfo] = []
+    let lines: [string] = fs::read_lines(repos_data())
+    let mut i: int = 0
+    while i < lines.len() is
+        let f: [string] = split(lines[i])
+        if f.len() >= 7 is
+            result.push(github::RepoInfo {
+                name: f[0], full_name: f[1], language: f[2], description: f[3],
+                default_branch: f[4], fork: f[5] == "1", archived: f[6] == "1"
+            })
+        end
+        i += 1
+    end
+    return result
+end
+
+fn save_entries(entries: [github::EntryInfo]) is
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < entries.len() is
+        let e: github::EntryInfo = entries[i]
+        out = out + e.name + sep() + e.path + sep() + e.kind + sep() + e.download_url + "\n"
+        i += 1
+    end
+    fs::write(entries_data(), out)
+end
+
+fn load_entries() -> [github::EntryInfo] is
+    let mut result: [github::EntryInfo] = []
+    let lines: [string] = fs::read_lines(entries_data())
+    let mut i: int = 0
+    while i < lines.len() is
+        let f: [string] = split(lines[i])
+        if f.len() >= 4 is
+            result.push(github::EntryInfo { name: f[0], path: f[1], kind: f[2], download_url: f[3] })
+        end
+        i += 1
+    end
+    return result
+end
+
+fn bool_str(b: bool) -> string is
+    if b is return "1" end
+    return "0"
+end
+
+;; A tiny, delimiter-based `split` — good enough for lines this module
+;; itself wrote, unlike `gh_json.h#` which has to survive arbitrary
+;; GitHub API text.
+fn split(line: string) -> [string] is
+    let d: string = sep()
+    let dn: int = d.len()
+    let n: int = line.len()
+    let mut out: [string] = []
+    let mut start: int = 0
+    let mut i: int = 0
+    while i < n is
+        if i + dn <= n && line[i..i + dn] == d is
+            out.push(line[start..i])
+            i += dn
+            start = i
+        else is
+            i += 1
+        end
+    end
+    out.push(line[start..n])
+    return out
+end
+
+;; ── the one shared "click handler" pool ─────────────────────────────
+
+fn bump_rev() is
+    sync::atomic_add("hdev_rev", 1)
+end
+
+fn make_item_handler(idx: int) -> fn(string) -> string is
+    return |args_json: string| -> string is
+        let view: string = read_or(view_file(), "repos")
+        if view == "repos" is
+            let repos: [github::RepoInfo] = load_repos()
+            if idx < repos.len() is open_repo(repos[idx]) end
+        elsif view == "files" is
+            let entries: [github::EntryInfo] = load_entries()
+            if idx < entries.len() is open_entry(entries[idx]) end
+        end
+        return "{}"
+    end
+end
+
+fn open_repo(r: github::RepoInfo) is
+    fs::write(message_file(), "Loading " + r.full_name + " ...")
+    let entries: [github::EntryInfo] = github::list_contents(r.full_name, "")
+    save_entries(entries)
+    fs::write(repo_file(), r.full_name)
+    fs::write(path_file(), "")
+    fs::write(view_file(), "files")
+    fs::write(message_file(), "")
+    bump_rev()
+end
+
+fn open_entry(e: github::EntryInfo) is
+    if e.kind == "dir" is
+        let full_name: string = read_or(repo_file(), "")
+        let entries: [github::EntryInfo] = github::list_contents(full_name, e.path)
+        save_entries(entries)
+        fs::write(path_file(), e.path)
+        bump_rev()
+    else is
+        let content: string = github::fetch_raw(e.download_url)
+        fs::write(content_data(), content)
+        fs::write(cfile_file(), e.path)
+        fs::write(view_file(), "content")
+        bump_rev()
+    end
+end
+
+;; ── fixed (non-pooled) commands ──────────────────────────────────────
+
+fn cmd_go_back(args_json: string) -> string is
+    let view: string = read_or(view_file(), "repos")
+    if view == "content" is
+        fs::write(view_file(), "files")
+    elsif view == "files" is
+        let cur_path: string = read_or(path_file(), "")
+        if cur_path == "" is
+            fs::write(view_file(), "repos")
+        else is
+            let full_name: string = read_or(repo_file(), "")
+            let parent: string = path::parent(cur_path)
+            let entries: [github::EntryInfo] = github::list_contents(full_name, parent)
+            save_entries(entries)
+            fs::write(path_file(), parent)
+        end
+    end
+    bump_rev()
+    return "{}"
+end
+
+fn cmd_refresh_repos(args_json: string) -> string is
+    fs::write(message_file(), "Refreshing repository list ...")
+    save_repos(github::list_org_repos())
+    fs::write(view_file(), "repos")
+    fs::write(path_file(), "")
+    fs::write(repo_file(), "")
+    fs::write(message_file(), "")
+    bump_rev()
+    return "{}"
+end
+
+fn cmd_save_copy(args_json: string) -> string is
+    let rel: string = read_or(cfile_file(), "file.txt")
+    let content: string = read_or(content_data(), "")
+    let dest_dir: string = path::join(env::home(), "hdev-downloads")
+    fs::mkdir(dest_dir)
+    let dest: string = path::join(dest_dir, path::filename(rel))
+    fs::write(dest, content)
+    dialog::info("Saved", "Saved a local copy to:\n" + dest + "\n\nOpen it for editing with:\n  hdev \"" + dest + "\"")
+    return "{}"
+end
+
+;; ── rendering ────────────────────────────────────────────────────────
+
+fn html_escape(s: string) -> string is
+    let n: int = s.len()
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < n is
+        let ch: string = s[i..i + 1]
+        if ch == "&" is out = out + "&amp;"
+        elsif ch == "<" is out = out + "&lt;"
+        elsif ch == ">" is out = out + "&gt;"
+        else is out = out + ch
+        end
+        i += 1
+    end
+    return out
+end
+
+fn shell_html(header: string, body: string) -> string is
+    return "<html><body>"
+        + "<div class=\"topbar\"><span class=\"brand\">hdev</span>"
+        + "<span class=\"crumb\">" + header + "</span>"
+        + "<button on-click=\"refresh_repos\" class=\"btn small\">Refresh</button>"
+        + "</div>"
+        + "<div class=\"content\">" + body + "</div>"
+        + "</body></html>"
+end
+
+fn render_repos() -> string is
+    let repos: [github::RepoInfo] = load_repos()
+    let msg: string = read_or(message_file(), "")
+    let mut body: string = "<div class=\"msg\">" + html_escape(msg) + "</div>"
+    body = body + "<div class=\"list\">"
+
+    let mut i: int = 0
+    while i < repos.len() && i < item_pool() is
+        let r: github::RepoInfo = repos[i]
+        let badge: string = lang_badge(r.language)
+        let flags: string = fork_flag(r.fork) + archived_flag(r.archived)
+        body = body + "<div class=\"card\">"
+            + "<div class=\"card-title\">" + html_escape(r.name) + flags + "</div>"
+            + "<div class=\"card-desc\">" + html_escape(r.description) + "</div>"
+            + badge
+            + "<button on-click=\"item_" + to_string(i) + "\" class=\"btn\">Browse</button>"
+            + "</div>"
+        i += 1
+    end
+    body = body + "</div>"
+    return shell_html(github::org_name(), body)
+end
+
+fn lang_badge(language: string) -> string is
+    if language == "" is return "" end
+    return "<span class=\"lang-badge\">" + html_escape(language) + "</span>"
+end
+
+fn fork_flag(is_fork: bool) -> string is
+    if is_fork is return " [fork]" end
+    return ""
+end
+
+fn archived_flag(is_archived: bool) -> string is
+    if is_archived is return " [archived]" end
+    return ""
+end
+
+fn render_files() -> string is
+    let entries: [github::EntryInfo] = load_entries()
+    let full_name: string = read_or(repo_file(), "")
+    let cur_path: string = read_or(path_file(), "")
+    let crumb: string = full_name + path_suffix(cur_path)
+
+    let mut body: string = "<button on-click=\"go_back\" class=\"btn small\">&lt; Back</button><div class=\"list\">"
+    let mut i: int = 0
+    while i < entries.len() && i < item_pool() is
+        let e: github::EntryInfo = entries[i]
+        let icon: string = if e.kind == "dir" then "[dir] " else "[file] "
+        let ext: string = extension_of(e.name)
+        let tag: string = entry_tag(e.kind, ext)
+        body = body + "<div class=\"row\">"
+            + "<span class=\"row-name\">" + icon + html_escape(e.name) + "</span>" + tag
+            + "<button on-click=\"item_" + to_string(i) + "\" class=\"btn small\">Open</button>"
+            + "</div>"
+        i += 1
+    end
+    body = body + "</div>"
+    return shell_html(crumb, body)
+end
+
+fn path_suffix(cur_path: string) -> string is
+    if cur_path == "" is return "" end
+    return "/" + cur_path
+end
+
+fn entry_tag(kind: string, ext: string) -> string is
+    if kind == "dir" is return "" end
+    return "<span class=\"lang-badge\" style=\"color:" + accent_or_gray(ext) + "\">"
+        + html_escape(langs::detect_by_ext(ext).name) + tag_note(ext) + "</span>"
+end
+
+fn tag_note(ext: string) -> string is
+    if langs::is_hackeros_only(ext) is return " (unsupported by GitHub)" end
+    return ""
+end
+
+fn accent_or_gray(ext: string) -> string is
+    let c: string = langs::detect_by_ext(ext).color
+    if c == "" is return "#888888" end
+    return c
+end
+
+fn extension_of(name: string) -> string is
+    let n: int = name.len()
+    let mut i: int = n - 1
+    while i >= 0 is
+        if name[i..i + 1] == "." is return name[i + 1..n] end
+        i -= 1
+    end
+    return ""
+end
+
+fn render_content() -> string is
+    let rel: string = read_or(cfile_file(), "")
+    let content: string = read_or(content_data(), "")
+    let ext: string = extension_of(rel)
+    let lang: string = langs::detect_by_ext(ext).name
+
+    let mut body: string = "<button on-click=\"go_back\" class=\"btn small\">&lt; Back</button>"
+        + "<button on-click=\"save_copy\" class=\"btn small\">Save a local copy</button>"
+        + "<div class=\"filebar\"><span class=\"lang-badge\">" + html_escape(lang) + tag_note(ext) + "</span></div>"
+        + "<pre class=\"code\">" + html_escape(truncated(content)) + "</pre>"
+    return shell_html(rel, body)
+end
+
+;; Very large files would make for an equally large HTML document with
+;; no scroll virtualization on the other end — keep the viewer usable.
+fn truncated(content: string) -> string is
+    let limit: int = 20000
+    if content.len() <= limit is return content end
+    return content[0..limit] + "\n\n... (truncated for display — use \"Save a local copy\" to get the whole file)"
+end
+
+fn tick(a: app::App) -> app::App is
+    let rev: int = sync::atomic_load("hdev_rev")
+    let last: int = sync::atomic_load("hdev_last_rendered_rev")
+    if rev == last is return a end
+    sync::atomic_store("hdev_last_rendered_rev", rev)
+
+    let view: string = read_or(view_file(), "repos")
+    if view == "files" is return app::load_html_str(a, render_files()) end
+    if view == "content" is return app::load_html_str(a, render_content()) end
+    return app::load_html_str(a, render_repos())
+end
+
+;; Silver needs a .ttf to draw text and bundles none. Order: HDEV_FONT
+;; override, the copy shipped next to hdev (frontend/fonts), then the
+;; usual DejaVu Sans install locations on Linux.
+fn font_path() -> string is
+    let custom: string = env::get_or("HDEV_FONT", "")
+    if custom != "" is return custom end
+    if fs::exists("frontend/fonts/DejaVuSans.ttf") is return "frontend/fonts/DejaVuSans.ttf" end
+    if fs::exists("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") is return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" end
+    if fs::exists("/usr/share/fonts/TTF/DejaVuSans.ttf") is return "/usr/share/fonts/TTF/DejaVuSans.ttf" end
+    return "/usr/share/fonts/dejavu/DejaVuSans.ttf"
+end
+
+;; ── entry point ──────────────────────────────────────────────────────
+
+pub fn launch() is
+    fs::mkdir(cache_dir())
+    fs::write(view_file(), "repos")
+    fs::write(path_file(), "")
+    fs::write(repo_file(), "")
+    fs::write(message_file(), "Loading " + github::org_name() + " ...")
+    save_repos([])
+
+    sync::atomic_new("hdev_rev", 1)
+    sync::atomic_new("hdev_last_rendered_rev", 0)
+
+    let repos: [github::RepoInfo] = github::list_org_repos()
+    save_repos(repos)
+    fs::write(message_file(), "")
+
+    let mut a: app::App = app::new("hdev — " + github::org_name(), 1100, 720)
+    a = app::with_font(a, font_path(), 16)
+    a = app::load_html_str(a, render_repos())
+    a = app::load_css(a, "frontend/style.css")
+    a = app::command(a, "go_back", cmd_go_back)
+    a = app::command(a, "refresh_repos", cmd_refresh_repos)
+    a = app::command(a, "save_copy", cmd_save_copy)
+
+    let mut i: int = 0
+    while i < item_pool() is
+        let idx: int = i   ;; a fresh binding per iteration — see the
+                            ;; module doc comment on `dispatch_from`
+                            ;; matching by first-registered name; this
+                            ;; also sidesteps closures capturing a
+                            ;; shared, mutated loop variable by
+                            ;; reference instead of by value.
+        a = app::command(a, "item_" + to_string(idx), make_item_handler(idx))
+        i += 1
+    end
+
+    a = app::on_tick(a, tick)
+    app::run(a)
+end
