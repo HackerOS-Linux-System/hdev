@@ -1,0 +1,319 @@
+mod buffer
+mod highlight
+mod langs
+mod history
+mod workspace_git
+
+use "bit -> tui" from "tui"
+use "std -> fs"     from "fs"
+use "std -> path"   from "path"
+
+struct Model is
+    pub mode:         string   ;; "browser" | "editor"
+    pub cwd:          string
+    pub entries:      [string]
+    pub list:         any      ;; tui::List
+    pub buf:          buffer::Buffer
+    pub status:       string
+    pub show_history: bool
+    pub history_view: any      ;; tui::Viewport
+    pub branch:       string
+end
+
+;; ── entry point ──────────────────────────────────────────────────────
+
+;; `start_file` is "" to open hdev's file browser (the plain `hdev`
+;; invocation), or a path to jump straight into editing it (`hdev
+;; <file>`). `tui::run` wants a zero-argument `init`, so this closes
+;; over `start_file` — a read-only capture, never reassigned, which is
+;; exactly the kind of closure H-Sharp's known limitations around
+;; mutable capture (see H-Sharp/README.md) doesn't apply to.
+pub fn run_editor(start_file: string) is
+    let boot: fn() -> any = || -> any is
+        if start_file != "" is return open_file_model(start_file) end
+        return browser_model(fs::cwd())
+    end
+    tui::run(boot, update, view)
+end
+
+;; ── model construction ──────────────────────────────────────────────
+
+fn browser_model(dir: string) -> any is
+    let names: [string] = list_dir_entries(dir)
+    let ws: workspace_git::WorkspaceInfo = workspace_git::detect(dir)
+    return Model {
+        mode: "browser", cwd: dir, entries: names,
+        list: tui::list_set_height(tui::list_new(names), 18),
+        buf: buffer::new_empty(),
+        status: "hdev — " + dir + "  ·  enter: open  ·  q: quit",
+        show_history: false, history_view: tui::viewport_new(80, 10),
+        branch: branch_or_empty(ws)
+    }
+end
+
+fn open_file_model(file_path: string) -> any is
+    let buf: buffer::Buffer = buffer::load(file_path)
+    let ws: workspace_git::WorkspaceInfo = workspace_git::detect(path::parent(file_path))
+    return Model {
+        mode: "editor", cwd: path::parent(file_path), entries: [],
+        list: tui::list_new([]),
+        buf: buf,
+        status: status_for(buf),
+        show_history: false, history_view: tui::viewport_new(80, 10),
+        branch: branch_or_empty(ws)
+    }
+end
+
+fn branch_or_empty(ws: workspace_git::WorkspaceInfo) -> string is
+    if ws.is_repo is return ws.branch end
+    return ""
+end
+
+fn list_dir_entries(dir: string) -> [string] is
+    let raw: [string] = fs::list_dir(dir)
+    let mut out: [string] = ["../"]
+    let mut i: int = 0
+    while i < raw.len() is
+        let full: string = path::join(dir, raw[i])
+        if fs::is_dir(full) is out.push(raw[i] + "/") else is out.push(raw[i]) end
+        i += 1
+    end
+    return out
+end
+
+fn status_for(buf: buffer::Buffer) -> string is
+    let name: string = if buf.path == "" then "[untitled]" else buf.path
+    let dirty: string = if buf.dirty then " [modified]" else ""
+    let lang: string = langs::detect_by_path(buf.path).name
+    return name + dirty + "  ·  " + lang + "  ·  ^S save  ·  ^H history  ·  esc browser  ·  ^C quit"
+end
+
+;; ── update ───────────────────────────────────────────────────────────
+
+fn update(model: any, msg: any) -> any is
+    let m: Model = model
+    if tui::is_ctrl_c(msg) is return (m, tui::cmd_quit()) end
+
+    if m.mode == "browser" is return update_browser(m, msg) end
+    return update_editor(m, msg)
+end
+
+fn update_browser(m: Model, msg: any) -> any is
+    if tui::msg_is_key(msg, "q") is return (m, tui::cmd_quit()) end
+
+    if tui::msg_is_key(msg, "enter") is
+        let sel: string = tui::list_selected(m.list)
+        if sel == "" is return (m, tui::cmd_none()) end
+        if sel == "../" is return (browser_model(path::parent(m.cwd)), tui::cmd_none()) end
+        if ends_with_slash(sel) is
+            return (browser_model(path::join(m.cwd, drop_last(sel))), tui::cmd_none())
+        end
+        return (open_file_model(path::join(m.cwd, sel)), tui::cmd_none())
+    end
+
+    let new_list: any = tui::list_update(m.list, msg)
+    let m2: Model = Model {
+        mode: m.mode, cwd: m.cwd, entries: m.entries, list: new_list, buf: m.buf,
+        status: m.status, show_history: m.show_history, history_view: m.history_view,
+        branch: m.branch
+    }
+    return (m2, tui::cmd_none())
+end
+
+fn update_editor(m: Model, msg: any) -> any is
+    if tui::msg_is_key(msg, "esc") is return (browser_model(m.cwd), tui::cmd_none()) end
+
+    if m.show_history is return update_history_panel(m, msg) end
+
+    if tui::msg_is_key(msg, "ctrl+h") is
+        return (open_history_panel(m), tui::cmd_none())
+    end
+    if tui::msg_is_key(msg, "ctrl+s") is
+        return (do_save(m), tui::cmd_none())
+    end
+    if tui::msg_is_tick(msg) || tui::msg_is_resize(msg) is
+        return (m, tui::cmd_none())
+    end
+
+    let key: string = tui::msg_key(msg)
+    let mut buf: buffer::Buffer = m.buf
+
+    if key == "up" is buf = buffer::move_up(buf)
+    elsif key == "down" is buf = buffer::move_down(buf)
+    elsif key == "left" is buf = buffer::move_left(buf)
+    elsif key == "right" is buf = buffer::move_right(buf)
+    elsif key == "home" || key == "ctrl+a" is buf = buffer::move_line_start(buf)
+    elsif key == "end" || key == "ctrl+e" is buf = buffer::move_line_end(buf)
+    elsif key == "enter" is buf = buffer::insert_newline(buf)
+    elsif key == "backspace" is buf = buffer::backspace(buf)
+    elsif key == "delete" || key == "ctrl+d" is buf = buffer::delete_forward(buf)
+    elsif key == "tab" is buf = buffer::insert_text(buf, "    ")
+    elsif key == "space" is buf = buffer::insert_text(buf, " ")
+    elsif char_count(key) == 1 is buf = buffer::insert_text(buf, key)
+    end
+
+    buf = buffer::scroll_into_view(buf, editor_height())
+    let m2: Model = Model {
+        mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: buf,
+        status: status_for(buf), show_history: m.show_history, history_view: m.history_view,
+        branch: m.branch
+    }
+    return (m2, tui::cmd_none())
+end
+
+fn open_history_panel(m: Model) -> Model is
+    let lines: [string] = history::recent_log(m.cwd, 200)
+    let content: string = if lines.len() == 0 then "No local history yet for this project — save a file with ^S to start one." else join_with_newlines(lines)
+    let vp: any = tui::viewport_set_content(tui::viewport_new(tui::term_width() - 4, editor_height()), content)
+    return Model {
+        mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: m.buf,
+        status: m.status, show_history: true, history_view: vp, branch: m.branch
+    }
+end
+
+fn update_history_panel(m: Model, msg: any) -> any is
+    if tui::msg_is_key(msg, "q") || tui::msg_is_key(msg, "esc") || tui::msg_is_key(msg, "ctrl+h") is
+        let m2: Model = Model {
+            mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: m.buf,
+            status: m.status, show_history: false, history_view: m.history_view, branch: m.branch
+        }
+        return (m2, tui::cmd_none())
+    end
+    let vp2: any = tui::viewport_update(m.history_view, msg)
+    let m2: Model = Model {
+        mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: m.buf,
+        status: m.status, show_history: true, history_view: vp2, branch: m.branch
+    }
+    return (m2, tui::cmd_none())
+end
+
+;; Saves to the real file first — that always happens, unconditionally
+;; — and only then takes a best-effort local-history snapshot. A
+;; history-repo hiccup (disk full, permissions, ...) must never look
+;; like the actual save failed, so its outcome only ever changes the
+;; status line, never whether `buffer::save` ran.
+fn do_save(m: Model) -> Model is
+    if m.buf.path == "" is
+        let m2: Model = Model {
+            mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: m.buf,
+            status: "Nothing to save yet — start hdev with a path to create a new file (e.g. hdev notes.h#).",
+            show_history: m.show_history, history_view: m.history_view, branch: m.branch
+        }
+        return m2
+    end
+
+    let saved: buffer::Buffer = buffer::save(m.buf)
+    let rel: string = path::filename(saved.path)
+    let root: string = path::parent(saved.path)
+    let short: string = history::snapshot(root, rel, buffer::content(saved), "Snapshot: " + rel)
+    let note: string = if short == "" then "" else "  (history " + short + ")"
+
+    return Model {
+        mode: m.mode, cwd: m.cwd, entries: m.entries, list: m.list, buf: saved,
+        status: status_for(saved) + note, show_history: m.show_history,
+        history_view: m.history_view, branch: m.branch
+    }
+end
+
+;; ── view ─────────────────────────────────────────────────────────────
+
+fn view(model: any) -> string is
+    let m: Model = model
+    if m.mode == "browser" is return view_browser(m) end
+    if m.show_history is return view_history(m) end
+    return view_editor(m)
+end
+
+fn view_browser(m: Model) -> string is
+    let title_style: any = tui::style_bold(tui::style_fg(tui::style_new(), "cyan"), true)
+    let title: string = tui::style_render(title_style, "hdev — " + m.cwd + branch_suffix(m))
+    let body: string = tui::list_view(m.list)
+    let help: string = tui::help_view(["↑/↓", "enter", "q"], ["move", "open", "quit"])
+    return title + "\n\n" + body + "\n" + help
+end
+
+fn view_editor(m: Model) -> string is
+    let ext: string = langs::detect_by_path(m.buf.path).ext
+    let height: int = editor_height()
+    let end_row: int = min_int(m.buf.top + height, buffer::line_count(m.buf))
+
+    let gutter_w: int = char_count(to_string(buffer::line_count(m.buf))) + 1
+    let mut body: string = ""
+    let mut i: int = m.buf.top
+    while i < end_row is
+        let ln: string = m.buf.lines[i]
+        let rendered: string = if i == m.buf.cursor_row then with_cursor_marker(ln, m.buf.cursor_col) else ln
+        let highlighted: string = highlight::highlight_line(rendered, ext)
+        body = body + tui::colorize(pad_gutter(to_string(i + 1), gutter_w), "8") + " " + highlighted + "\n"
+        i += 1
+    end
+
+    let status_style: any = tui::style_fg(tui::style_new(), "8")
+    return body + tui::style_render(status_style, m.status)
+end
+
+fn view_history(m: Model) -> string is
+    let title_style: any = tui::style_bold(tui::style_fg(tui::style_new(), "cyan"), true)
+    let title: string = tui::style_render(title_style, "Local history — " + m.buf.path)
+    let help: string = tui::help_view(["↑/↓", "esc/q/^H"], ["scroll", "close"])
+    return title + "\n\n" + tui::viewport_view(m.history_view) + "\n" + help
+end
+
+fn branch_suffix(m: Model) -> string is
+    if m.branch == "" is return "" end
+    return "  (" + m.branch + ")"
+end
+
+;; A plain reverse-video marker at the cursor's character position — no
+;; real terminal cursor is used, since `draw` repaints the whole screen
+;; every frame (see tui/README.md's own "known limitations": there is
+;; no cheaper partial-redraw path to hook a blinking cursor into).
+fn with_cursor_marker(line: string, col: int) -> string is
+    let n: int = char_count(line)
+    if col >= n is return line + tui::colorize(" ", "reverse") end
+    let ch: string = line[col..col + 1]
+    return line[0..col] + tui::colorize(ch, "reverse") + line[col + 1..n]
+end
+
+fn editor_height() -> int is
+    let h: int = tui::term_height() - 3
+    if h < 5 is return 5 end
+    return h
+end
+
+fn ends_with_slash(s: string) -> bool is
+    let n: int = s.len()
+    return n > 0 && s[n - 1..n] == "/"
+end
+
+fn drop_last(s: string) -> string is
+    return s[0..s.len() - 1]
+end
+
+fn pad_gutter(s: string, width: int) -> string is
+    let mut out: string = s
+    while char_count(out) < width is out = " " + out end
+    return out
+end
+
+fn join_with_newlines(lines: [string]) -> string is
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < lines.len() is
+        out = out + lines[i]
+        if i < lines.len() - 1 is out = out + "\n" end
+        i += 1
+    end
+    return out
+end
+
+fn min_int(a: int, b: int) -> int is
+    if a < b is return a end
+    return b
+end
+
+fn char_count(s: string) -> int is
+    let mut i: int = 0
+    while s[i..i + 1] != "" is i = i + 1 end
+    return i
+end
