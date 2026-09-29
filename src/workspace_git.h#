@@ -1,0 +1,25 @@
+use "bit -> git" from "hgit"
+
+pub struct WorkspaceInfo is
+    pub is_repo: bool
+    pub branch:  string   ;; "" if detached HEAD, or not a repo at all
+end
+
+fn no_repo() -> WorkspaceInfo is
+    return WorkspaceInfo { is_repo: false, branch: "" }
+end
+
+;; Walks up from `dir` looking for a `.git` the way `git`/`hgit` itself
+;; would, and reports its current branch if any. Always succeeds with
+;; `is_repo: false` rather than propagating an error — this is a status
+;; bar badge, not something worth interrupting editing over.
+pub fn detect(dir: string) -> WorkspaceInfo is
+    match hgit::repository::discover(dir) is
+        hgit::error::GitResult::Err(_) => return no_repo()
+        hgit::error::GitResult::Ok(repo) => is
+            let branch: string? = repo.head_branch()
+            if branch == nil is return WorkspaceInfo { is_repo: true, branch: "(detached)" } end
+            return WorkspaceInfo { is_repo: true, branch: branch }
+        end
+    end
+end
