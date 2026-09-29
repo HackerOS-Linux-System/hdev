@@ -1,0 +1,125 @@
+use "std -> config" from "cfg"
+use "std -> path"   from "path"
+use "std -> fs"     from "fs"
+use "std -> env"    from "env"
+
+pub struct LangInfo is
+    pub ext:   string
+    pub name:  string
+    pub color: string   ;; "" means "no accent color, render as plain text"
+end
+
+;; ── extensions github.com already understands ──────────────────────────
+;; A short, deliberately incomplete list — just enough that hdev's own
+;; status bar isn't blank for the everyday files a HackerOS dev also
+;; edits alongside H#/HackerScript/Hacker Lang source. Anything missing
+;; here simply falls back to plain text, exactly like an unknown
+;; extension would.
+fn well_known(ext: string) -> LangInfo is
+    if ext == "rs"                  is return LangInfo { ext: ext, name: "Rust",       color: "#dea584" } end
+    if ext == "py"                  is return LangInfo { ext: ext, name: "Python",     color: "#3572A5" } end
+    if ext == "js"                  is return LangInfo { ext: ext, name: "JavaScript", color: "#f1e05a" } end
+    if ext == "ts"                  is return LangInfo { ext: ext, name: "TypeScript", color: "#3178c6" } end
+    if ext == "go"                  is return LangInfo { ext: ext, name: "Go",         color: "#00ADD8" } end
+    if ext == "c"                   is return LangInfo { ext: ext, name: "C",          color: "#555555" } end
+    if ext == "h"                   is return LangInfo { ext: ext, name: "C Header",   color: "#555555" } end
+    if ext == "cpp" || ext == "cc"  is return LangInfo { ext: ext, name: "C++",        color: "#f34b7d" } end
+    if ext == "md"                  is return LangInfo { ext: ext, name: "Markdown",   color: "#083fa1" } end
+    if ext == "json"                is return LangInfo { ext: ext, name: "JSON",       color: "#292929" } end
+    if ext == "toml"                is return LangInfo { ext: ext, name: "TOML",       color: "#9c4221" } end
+    if ext == "yaml" || ext == "yml" is return LangInfo { ext: ext, name: "YAML",      color: "#cb171e" } end
+    if ext == "sh"                  is return LangInfo { ext: ext, name: "Shell",      color: "#89e051" } end
+    if ext == "html"                is return LangInfo { ext: ext, name: "HTML",       color: "#e34c26" } end
+    if ext == "css"                 is return LangInfo { ext: ext, name: "CSS",        color: "#563d7c" } end
+    return LangInfo { ext: ext, name: "Text", color: "" }
+end
+
+;; ── HackerOS-only extensions, read from config/languages.hk ────────────
+;; Search order: a per-user override, a system-wide install location,
+;; then the plain relative path (so `bytes run`/`h# preview` from inside
+;; a checkout of this repo picks it up with zero setup). Falling all the
+;; way through leaves the hardcoded three-language fallback below in
+;; place, so hdev never simply forgets what H# is just because the file
+;; moved.
+fn config_path() -> string is
+    let user_path: string = path::join(user_config_dir(), "languages.hk")
+    if fs::exists(user_path) is return user_path end
+
+    let system_path: string = path::join(system_config_dir(), "languages.hk")
+    if fs::exists(system_path) is return system_path end
+
+    return "config/languages.hk"
+end
+
+fn user_config_dir() -> string is
+    return path::join(env::home(), ".config/hdev")
+end
+
+fn system_config_dir() -> string is
+    return env::get_or("HDEV_CONFIG_DIR", "/usr/share/hdev")
+end
+
+pub fn load_custom() -> [LangInfo] is
+    let cfg: any = cfg::load(config_path())
+    let count: int = cfg::get_int(cfg, "LANG_COUNT")
+    if count <= 0 is return fallback_custom() end
+
+    let mut result: [LangInfo] = []
+    let mut i: int = 1
+    while i <= count is
+        let prefix: string = "LANG_" + to_string(i) + "_"
+        let ext: string = cfg::get(cfg, prefix + "EXT")
+        if ext != "" is
+            result.push(LangInfo {
+                ext:   ext,
+                name:  cfg::get(cfg, prefix + "NAME"),
+                color: cfg::get(cfg, prefix + "COLOR")
+            })
+        end
+        i += 1
+    end
+    if result.len() == 0 is return fallback_custom() end
+    return result
+end
+
+;; What hdev knows about even if config/languages.hk can't be found at
+;; all (a fresh `bytes install` gone wrong, a stripped-down container
+;; image, ...) — the three languages the whole point of this tool is to
+;; understand, hardcoded so hdev is never worse than "no accent color"
+;; for its own ecosystem's source files.
+fn fallback_custom() -> [LangInfo] is
+    return [
+        LangInfo { ext: "h#",  name: "H#",           color: "#8B0000" },
+        LangInfo { ext: "hcs", name: "HackerScript",  color: "#808080" },
+        LangInfo { ext: "hl",  name: "Hacker Lang",   color: "#800080" }
+    ]
+end
+
+;; ── public lookup API ────────────────────────────────────────────────
+
+pub fn detect_by_ext(ext: string) -> LangInfo is
+    let custom: [LangInfo] = load_custom()
+    let mut i: int = 0
+    while i < custom.len() is
+        if custom[i].ext == ext is return custom[i] end
+        i += 1
+    end
+    return well_known(ext)
+end
+
+pub fn detect_by_path(file_path: string) -> LangInfo is
+    return detect_by_ext(path::extension(file_path))
+end
+
+;; True for the extensions hdev knows about that github.com's Linguist
+;; does not (i.e. everything `config/languages.hk` lists). Used by the
+;; GUI browser to badge a file "(unsupported by GitHub)".
+pub fn is_hackeros_only(ext: string) -> bool is
+    let custom: [LangInfo] = load_custom()
+    let mut i: int = 0
+    while i < custom.len() is
+        if custom[i].ext == ext is return true end
+        i += 1
+    end
+    return false
+end
