@@ -1,326 +1,68 @@
 # hdev
 
-**TUI Code Editor dla HackerOS** — edytor kodu działający w terminalu, inspirowany Visual Studio Code.
+Narzędzie deweloperskie ekosystemu **HackerOS**, napisane w 100% w H#:
+edytor tekstu w terminalu (TUI) **oraz** przeglądarka kodu źródłowego organizacji
+[HackerOS-Linux-System](https://github.com/HackerOS-Linux-System) (GUI).
 
-Napisany w **Rust** z biblioteką **Ratatui**.
-
-```
- hdev  v0.1.0  |  main.rs  |  Rust
- RS main.rs *   PY script.py   SH run.sh
- ┌──────────────────┐
- │ ▾ my-project     │   1   fn main() {
- │   ▾ src          │   2       println!("HackerOS");
- │     rs main.rs * │   3   _
- │     rs lib.rs    │
- └──────────────────┘
- NORMAL  main.rs *   Rust         Ln 3, Col 1
-```
-
----
-
-## Funkcje
-
-- **Podswietlanie skladni** dla 28 jezykow i formatow
-- **Autocomplete z Tab** — slowa kluczowe, snippety, slowa z pliku
-- **Zintegrowany terminal** z obsługa `hsh` (shell HackerOS) lub `sh`
-- **Drzewo plikow** z nawigacja klawiaturowa
-- **Marketplace** — pobieranie pluginow `.hk` z JSON-owego repozytorium
-- **Zakladki** (tabs) dla wielu otwartych plikow
-- **Undo/Redo** do 200 krokow
-- **Wyszukiwanie** z podswietlaniem wszystkich wynikow
-- **Sesja** — zapamietuje otwarte pliki i histori komend terminala
-- **Ustawienia** zapisywane w `~/.cache/HackerOS/hdev/config.json`
-
----
-
-## Instalacja
-
-### Wymagania
-
-| Zaleznosc | Min. wersja |
-|-----------|-------------|
-| Rust      | 1.75        |
-| Cargo     | 1.75        |
-
-Rust instalujesz przez [rustup.rs](https://rustup.rs).
-
-### Budowanie
-
-```sh
-git clone https://github.com/HackerOS-Linux-System/hdev
-cd hdev
-cargo build --release
-sudo cp target/release/hdev /usr/local/bin/
-```
-
-### Uruchamianie
-
-```sh
-hdev                        # ekran powitalny
-hdev src/main.rs            # otworz konkretny plik
-hdev ~/projects/moj-projekt # otworz folder
-```
-
----
-
-## Skroty klawiszowe
-
-### Globalne
-
-| Skrot       | Akcja                        |
-|-------------|------------------------------|
-| `Ctrl+Q`    | Wyjdz z hdev                 |
-| `Ctrl+H`    | Pomoc — lista skrotow        |
-| `Esc`       | Zamknij panel / anuluj       |
-
-### Pliki
-
-| Skrot          | Akcja                        |
-|----------------|------------------------------|
-| `Ctrl+T`       | Nowy plik                    |
-| `Ctrl+O`       | Otworz plik lub folder       |
-| `Ctrl+S`       | Zapisz                       |
-| `Ctrl+Shift+S` | Zapisz jako                  |
-| `Ctrl+W`       | Zamknij zakladke / usun plik |
-
-### Widok i panele
-
-| Skrot    | Akcja                        |
-|----------|------------------------------|
-| `Ctrl+B` | Pokaz / ukryj terminal       |
-| `Ctrl+R` | Odswiez drzewo plikow        |
-| `Ctrl+M` | Marketplace                  |
-| `Ctrl+,` | Ustawienia                   |
-
-### Zakladki
-
-| Skrot         | Akcja              |
-|---------------|--------------------|
-| `Ctrl+N`      | Nastepna zakladka  |
-| `Ctrl+P`      | Poprzednia zakladka |
-| `Alt+1`–`Alt+9` | Zakladka nr 1–9  |
-
-### Edycja
-
-| Skrot           | Akcja                     |
-|-----------------|---------------------------|
-| `Tab`           | Autocomplete lub wciecie  |
-| `Ctrl+Z`        | Cofnij (Undo)             |
-| `Ctrl+Y`        | Ponow (Redo)              |
-| `Ctrl+D`        | Duplikuj linie            |
-| `Ctrl+F`        | Szukaj w pliku            |
-| `Home` / `End`  | Poczatek / koniec linii   |
-| `Ctrl+←/→`     | Skocz o slowo             |
-| `PgUp` / `PgDn` | Przewin strone            |
-
-### Terminal (gdy aktywny)
-
-| Skrot        | Akcja                       |
-|--------------|-----------------------------|
-| `Enter`      | Wykonaj komende             |
-| `Up` / `Down` | Historia komend            |
-| `PgUp/PgDn`  | Przewin output              |
-| `Ctrl+C`     | Anuluj wpisywanie           |
-| `Esc`        | Wróc fokus do edytora       |
-| `Ctrl+B`     | Zamknij terminal            |
-
----
-
-## Autocomplete
-
-hdev oferuje autouzupelnianie inspirowane VSCode IntelliSense:
-
-- **Slowa kluczowe jezyka** — np. `fn`, `let`, `match` dla Rust
-- **Snippety** — wpisz `fn` i Tab — wstawia caly szkielet funkcji
-- **Slowa z pliku** — zmienne i typy zdefiniowane w otwartym pliku
-
-**Uzycie:** wpisz pierwsze litery, pojawi sie popup. `Tab` akceptuje podpowiedz, `↑↓` wybiera, `Esc` zamyka.
-
-Mozna wylaczyc w ustawieniach (`Ctrl+,` -> "Autocomplete (Tab)").
-
----
-
-## Obslugiwane jezyki
-
-### Jezyki programowania
-
-| Jezyk          | Rozszerzenie      |
-|----------------|-------------------|
-| Hacker Lang    | `.hl`             |
-| Hacker Lang++  | `.hlpp` (BETA)    |
-| H#             | `.hs`             |
-| Rust           | `.rs`             |
-| Python         | `.py`             |
-| Go             | `.go`             |
-| C              | `.c`, `.h`        |
-| C++            | `.cpp`, `.cc`     |
-| JavaScript     | `.js`             |
-| TypeScript     | `.ts`             |
-| Java           | `.java`           |
-| Kotlin         | `.kt`             |
-| Dart           | `.dart`           |
-| Lua            | `.lua`            |
-| Nim            | `.nim`            |
-| Crystal        | `.cr`             |
-| Odin           | `.odin`           |
-| Shell          | `.sh`, `.bash`    |
-| Vala           | `.vala`           |
-| HTML           | `.html`           |
-| CSS            | `.css`            |
-
-### Formaty konfiguracyjne
-
-| Format   | Rozszerzenie     |
-|----------|------------------|
-| JSON     | `.json`          |
-| YAML     | `.yaml`, `.yml`  |
-| TOML     | `.toml`          |
-| HCL      | `.hcl`, `.tf`    |
-| XML      | `.xml`           |
-| HK Plugin | `.hk`           |
-
-Wiecej jezykow mozna dodac przez Marketplace.
-
----
-
-## Marketplace i pluginy
-
-Marketplace laduje liste pluginow z pliku JSON:
+## Użycie
 
 ```
-https://github.com/HackerOS-Linux-System/hdev/blob/main/community/marketplace.json
+hdev              # przeglądarka plików + edytor TUI (styl Visual Studio)
+hdev <plik>       # edycja wybranego pliku
+hdev app          # GUI: frontend do GitHuba dla organizacji HackerOS-Linux-System
+hdev --help
 ```
 
-Format pliku `marketplace.json`:
+### Edytor (TUI)
+| Klawisz | Akcja |
+|---|---|
+| `Ctrl+S` | zapis + snapshot w lokalnej historii |
+| `Ctrl+H` | panel lokalnej historii (hgit) |
+| `Esc` | powrót do przeglądarki plików |
+| `Ctrl+A` / `Ctrl+E` | początek / koniec linii |
+| `Ctrl+C` | wyjście (niezapisane zmiany przepadają) |
 
-```json
-{
-  "marketplace": [
-    {
-      "name": "Nazwa pluginu",
-      "description": "Krotki opis pluginu.",
-      "download": "https://przyklad.pl/plugin.hk",
-      "author": "Autor",
-      "version": "1.0.0",
-      "category": "language",
-      "tags": ["rust", "lsp"]
-    }
-  ]
-}
+### GUI (`hdev app`)
+Lista repozytoriów organizacji → drzewo plików → podgląd pliku. Rozpoznaje języki,
+których GitHub nie zna:
+
+| Język | Rozszerzenie | Kolor |
+|---|---|---|
+| H# | `.h#` | ciemnoczerwony `#8B0000` |
+| HackerScript | `.hcs` | szary `#808080` |
+| Hacker Lang | `.hl` | fioletowy `#800080` |
+
+Kolory żyją w `config/languages.hk` (można nadpisać w `~/.config/hdev/languages.hk`
+lub `/usr/share/hdev/`), więc nowy język to trzy linie konfiguracji.
+
+## Biblioteki (bytes.io)
+- `tui` – edytor (Model/Update/View, lista plików, viewport historii)
+- `git` (hgit) – lokalna historia edycji
+- `silver` – okno GUI przeglądarki
+
+`hdev` nie deklaruje żadnego bloku `extern` — cały FFI jest już w bibliotekach.
+
+## Budowanie
 ```
-
-Pole `download` to URL do pliku `.hk`. Po nacisnieciu `Enter` w Marketplace, hdev pobiera plik przez `curl` lub `wget` i zapisuje do:
-
+bytes install
+bytes build
+./build/hdev app
 ```
-~/.cache/HackerOS/hdev/plugins/nazwa-pluginu.hk
-```
+Do GUI potrzebny jest plik `.ttf` (domyślnie DejaVu Sans z systemu, albo `HDEV_FONT=/ścieżka.ttf`).
 
-### Format pluginu `.hk`
-
-Pliki `.hk` sa parsowane przez biblioteke [hk-parser](https://crates.io/crates/hk-parser).
-
-```ini
-# Przykladowy plugin
-[metadata]
-name        = "moj-plugin"
-version     = "1.0.0"
-author      = "Autor"
-description = "Opis pluginu"
-hdev_min    = "0.1.0"
-
-[syntax]
-extensions  = ".myext"
-comment     = "#"
-keywords    = "if else for while return"
-
-[hooks]
-on_save     = "moj-linter $FILE"
-on_open     = "echo Otwarto: $FILE"
-```
-
-Folder pluginow: `~/.cache/HackerOS/hdev/plugins/`
-
----
-
-## Konfiguracja
-
-Wszystkie ustawienia sa w `~/.cache/HackerOS/hdev/config.json`:
-
-```json
-{
-  "theme": "hacker-dark",
-  "tab_size": 4,
-  "auto_save": true,
-  "show_line_numbers": true,
-  "show_file_tree": true,
-  "word_wrap": false,
-  "autocomplete_enabled": true,
-  "terminal_shell": "hsh",
-  "default_language_override": "auto",
-  "recent_files": [],
-  "installed_plugins": [],
-  "marketplace_url": "https://raw.githubusercontent.com/..."
-}
-```
-
-Dostepne motywy: `hacker-dark`, `hacker-green`, `cyberpunk`, `matrix`, `nord`, `solarized-dark`, `dracula`, `monokai`, `gruvbox`, `one-dark`.
-
-Zmien motyw w ustawieniach: `Ctrl+,` -> "Motyw (Theme)" -> `←→`.
-
-### Sciezki plikow
-
-| Plik        | Sciezka                                         |
-|-------------|-------------------------------------------------|
-| Konfiguracja | `~/.cache/HackerOS/hdev/config.json`           |
-| Sesja       | `~/.cache/HackerOS/hdev/session.json`           |
-| Pluginy     | `~/.cache/HackerOS/hdev/plugins/*.hk`           |
-
----
-
-## Terminal
-
-Terminal hdev wykonuje komendy przez `hsh` (jesli zainstalowany) lub `sh`:
-
-```sh
-# Kazda komenda jest wykonywana jako:
-hsh -c "twoja komenda"
-# lub jesli brak hsh:
-sh -c "twoja komenda"
-```
-
-Wbudowane komendy obsługiwane przez hdev (nie przez powloke):
-- `cd <sciezka>` — zmiana katalogu
-- `clear` / `cls` — czyszczenie outputu
-
----
-
-## Architektura
-
-```
-src/
-  main.rs          — punkt wejscia
-  app.rs           — glowna logika, petla zdarzen
-  ui.rs            — rendering TUI (Ratatui)
-  editor.rs        — bufor tekstu, kursor, undo/redo
-  highlight.rs     — silnik podswietlania skladni
-  languages.rs     — definicje jezykow
-  autocomplete.rs  — silnik autouzupelniania
-  filetree.rs      — drzewo plikow
-  terminal_panel.rs — panel terminala
-  marketplace.rs   — marketplace z JSON
-  plugins.rs       — skaner plikow .hk
-  welcome.rs       — ekran powitalny
-  keybinds.rs      — mapowanie klawiszy
-  config.rs        — konfiguracja JSON
-  utils.rs         — funkcje pomocnicze
-```
-
----
+## Ograniczenia (świadome)
+- **Kod nie został skompilowany ani uruchomiony** — powstał na podstawie źródeł
+  H#, tui, git i silver; możliwe są drobne błędy składni/typów do poprawienia.
+- **GitHub API bez tokenu**: `std -> net_http` nie wspiera własnych nagłówków, więc
+  obowiązuje limit 60 zapytań/godz. na IP; widoczne max 100 repo i 80 wpisów katalogu.
+- **hgit ≠ prawdziwy git** (własny format na dysku). Dlatego historia edycji trzyma się
+  w `~/.local/share/hdev/history/`, poza repozytorium projektu, a znaczek gałęzi
+  czyta wyłącznie refy. Przeglądarka GUI nie klonuje repo — czyta je przez API.
+- Silver nie ma pętli w szablonach i `on-click` nie niesie argumentów, więc GUI używa
+  puli komend `item_0..item_79` i odświeżania przez `on_tick` (opis w `src/gui.h#`).
+- Podświetlanie składni jest heurystyczne (komentarze, stringi, słowa kluczowe H#).
+- Edytor: brak zaznaczania, schowka, cofania (Ctrl+Z) i szukania.
+- Pliki w GUI powyżej ~20 000 znaków są obcinane w podglądzie („Save a local copy” zapisuje całość do `~/hdev-downloads`).
 
 ## Licencja
-
-MIT — HackerOS Team
-
----
-
-*hdev jest czescia ekosystemu [HackerOS](https://hackeros-linux-system.github.io/HackerOS-Website/).*
+MIT
