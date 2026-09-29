@@ -1,0 +1,105 @@
+use "bit -> tui" from "tui"
+
+mod langs
+
+;; H#'s own keyword set (see H-Sharp/README.md's syntax section) is
+;; used for every extension — HackerScript/Hacker Lang share enough
+;; C-like/keyword-based shape that this still reads better than no
+;; highlighting at all, and hdev has no grammar for either yet.
+fn is_keyword(word: string) -> bool is
+    if word == "fn" || word == "let" || word == "mut" || word == "pub" is return true end
+    if word == "return" || word == "if" || word == "elsif" || word == "else" is return true end
+    if word == "is" || word == "end" || word == "while" || word == "for" || word == "in" is return true end
+    if word == "match" || word == "struct" || word == "enum" || word == "impl" || word == "trait" is return true end
+    if word == "use" || word == "mod" || word == "from" || word == "as" is return true end
+    if word == "async" || word == "await" || word == "unsafe" || word == "extern" is return true end
+    if word == "true" || word == "false" || word == "nil" || word == "self" is return true end
+    return false
+end
+
+fn is_word_char(ch: string) -> bool is
+    if ch >= "a" && ch <= "z" is return true end
+    if ch >= "A" && ch <= "Z" is return true end
+    if ch >= "0" && ch <= "9" is return true end
+    return ch == "_"
+end
+
+fn is_digit(ch: string) -> bool is
+    return ch >= "0" && ch <= "9"
+end
+
+;; Full-line comment markers hdev recognizes across the ecosystem's
+;; languages: `;;`/`///` (H#), `//` (C-like), `#` (shell-ish/HackerScript
+;; guess). A real per-language lexer would know for certain; this is a
+;; readable approximation.
+fn comment_start(line: string) -> int is
+    let n: int = line.len()
+    let mut i: int = 0
+    while i < n is
+        let ch: string = line[i..i + 1]
+        if ch == " " || ch == "\t" is
+            i += 1
+        else is
+            if ch == ";" && i + 1 < n && line[i + 1..i + 2] == ";" is return i end
+            if ch == "#" is return i end
+            if ch == "/" && i + 1 < n && line[i + 1..i + 2] == "/" is return i end
+            return -1
+        end
+    end
+    return -1
+end
+
+;; Highlight one line for `ext` (a bare extension, e.g. "h#"). Returns
+;; ANSI-colored text ready to hand to `tui::style_render`/`draw`.
+pub fn highlight_line(line: string, ext: string) -> string is
+    let accent: string = langs::detect_by_ext(ext).color
+    let cstart: int = comment_start(line)
+    if cstart == 0 is
+        return tui::colorize(line, "8")
+    end
+
+    let n: int = line.len()
+    let mut out: string = ""
+    let mut i: int = 0
+    let mut in_code_end: int = if cstart > 0 then cstart else n
+
+    while i < in_code_end is
+        let ch: string = line[i..i + 1]
+
+        if ch == "\"" is
+            let mut j: int = i + 1
+            while j < in_code_end && line[j..j + 1] != "\"" is
+                if line[j..j + 1] == "\\" && j + 1 < in_code_end is j += 1 end
+                j += 1
+            end
+            let end_: int = if j < in_code_end then j + 1 else in_code_end
+            out = out + tui::colorize(line[i..end_], "green")
+            i = end_
+        else is
+            if is_word_char(ch) is
+                let mut j: int = i
+                while j < in_code_end && is_word_char(line[j..j + 1]) is j += 1 end
+                let word: string = line[i..j]
+                if is_keyword(word) is
+                    out = out + colored_or_bold(word, accent)
+                else is
+                    if is_digit(ch) is out = out + tui::colorize(word, "cyan") else is out = out + word end
+                end
+                i = j
+            else is
+                out = out + ch
+                i += 1
+            end
+        end
+    end
+
+    if cstart >= 0 is
+        out = out + tui::colorize(line[cstart..n], "8")
+    end
+    return out
+end
+
+fn colored_or_bold(word: string, accent: string) -> string is
+    if accent == "" is return tui::colorize(word, "yellow") end
+    return tui::colorize(word, accent)
+end
