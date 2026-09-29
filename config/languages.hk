@@ -1,0 +1,26 @@
+# hdev language registry
+#
+# github.com doesn't recognize these HackerOS-Linux-System languages, so
+# GitHub's own web UI shows them as "plain text" with no color and no
+# highlighting. hdev keeps its own small registry instead — loaded at
+# startup by src/langs.h# via std -> config (KEY=VALUE, "#" comments,
+# blank lines ignored — see H-Sharp's std/config.h#).
+#
+# To teach hdev about one more HackerOS language, add three lines
+# following the same LANG_<n>_* pattern below and bump LANG_COUNT.
+# No rebuild of the color table itself is required — langs.h# reads
+# this file fresh every time hdev starts.
+
+LANG_COUNT=3
+
+LANG_1_EXT=h#
+LANG_1_NAME=H#
+LANG_1_COLOR=#8B0000
+
+LANG_2_EXT=hcs
+LANG_2_NAME=HackerScript
+LANG_2_COLOR=#808080
+
+LANG_3_EXT=hl
+LANG_3_NAME=Hacker Lang
+LANG_3_COLOR=#800080
