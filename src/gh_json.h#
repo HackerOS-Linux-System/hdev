@@ -1,0 +1,135 @@
+use "std -> strings" from "str"
+use "std -> conv"    from "conv"
+
+;; Split a top-level JSON array of objects ("[{...},{...}]") into the
+;; substring for each `{...}` member, respecting nested braces and
+;; quoted strings (so a `}` inside a string, or inside a nested object,
+;; doesn't end the split early). Returns [] for anything that isn't a
+;; non-empty top-level array of objects.
+pub fn split_array_objects(json_array: string) -> [string] is
+    let n: int = json_array.len()
+    let mut result: [string] = []
+    let mut depth: int = 0
+    let mut in_string: bool = false
+    let mut start: int = -1
+    let mut i: int = 0
+
+    while i < n is
+        let ch: string = json_array[i..i + 1]
+
+        if in_string is
+            if ch == "\\" && i + 1 < n is
+                i += 1
+            else is
+                if ch == "\"" is in_string = false end
+            end
+        else is
+            if ch == "\"" is
+                in_string = true
+            elsif ch == "{" is
+                if depth == 0 is start = i end
+                depth += 1
+            elsif ch == "}" is
+                depth -= 1
+                if depth == 0 && start >= 0 is
+                    result.push(json_array[start..i + 1])
+                    start = -1
+                end
+            end
+        end
+        i += 1
+    end
+    return result
+end
+
+;; Index just past the ':' that follows `"key"` inside `obj`, skipping
+;; any whitespace after it — the start of the value. -1 if `key` isn't
+;; a top-level field of `obj`.
+fn value_start(obj: string, key: string) -> int is
+    let needle: string = "\"" + key + "\""
+    let at: int = str::index_of(obj, needle)
+    if at < 0 is return -1 end
+
+    let n: int = obj.len()
+    let mut i: int = at + needle.len()
+    while i < n && obj[i..i + 1] != ":" is i += 1 end
+    if i >= n is return -1 end
+    i += 1
+    while i < n && (obj[i..i + 1] == " " || obj[i..i + 1] == "\n" || obj[i..i + 1] == "\t") is
+        i += 1
+    end
+    return i
+end
+
+;; A string field, JSON-unescaped for the handful of escapes GitHub's
+;; API actually emits in the fields hdev reads (`\"`, `\\`, `\/`, `\n`,
+;; `\t`). "" for a missing key, a JSON `null`, or any non-string value.
+pub fn get_str(obj: string, key: string) -> string is
+    let start: int = value_start(obj, key)
+    if start < 0 is return "" end
+    let n: int = obj.len()
+    if start >= n || obj[start..start + 1] != "\"" is return "" end
+
+    let mut i: int = start + 1
+    let mut out: string = ""
+    while i < n && obj[i..i + 1] != "\"" is
+        let ch: string = obj[i..i + 1]
+        if ch == "\\" && i + 1 < n is
+            let esc: string = obj[i + 1..i + 2]
+            if esc == "n" is out = out + "\n"
+            elsif esc == "t" is out = out + "\t"
+            elsif esc == "\"" is out = out + "\""
+            elsif esc == "\\" is out = out + "\\"
+            elsif esc == "/" is out = out + "/"
+            else is out = out + esc
+            end
+            i += 2
+        else is
+            out = out + ch
+            i += 1
+        end
+    end
+    return out
+end
+
+;; An integer field ("stargazers_count", "size", ...). 0 if missing,
+;; `null`, or not a plain number.
+pub fn get_int(obj: string, key: string) -> int is
+    let start: int = value_start(obj, key)
+    if start < 0 is return 0 end
+    let n: int = obj.len()
+    let mut i: int = start
+    let mut raw: string = ""
+    while i < n is
+        let ch: string = obj[i..i + 1]
+        if (ch >= "0" && ch <= "9") || ch == "-" is
+            raw = raw + ch
+            i += 1
+        else is
+            i = n
+        end
+    end
+    if raw == "" || raw == "-" is return 0 end
+    return conv::str_to_int(raw)
+end
+
+;; A boolean field ("fork", "archived", ...). false if missing or not
+;; exactly `true`.
+pub fn get_bool(obj: string, key: string) -> bool is
+    let start: int = value_start(obj, key)
+    if start < 0 is return false end
+    let n: int = obj.len()
+    if start + 4 <= n is return obj[start..start + 4] == "true" end
+    return false
+end
+
+;; Whether `key` is present in `obj` and not JSON `null` — mainly for
+;; the "download_url": null case a directory entry gets from GitHub's
+;; contents endpoint.
+pub fn has_non_null(obj: string, key: string) -> bool is
+    let start: int = value_start(obj, key)
+    if start < 0 is return false end
+    let n: int = obj.len()
+    if start + 4 <= n && obj[start..start + 4] == "null" is return false end
+    return true
+end
