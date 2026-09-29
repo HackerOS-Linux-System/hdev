@@ -1,0 +1,110 @@
+mod gh_json
+
+use "std -> http" from "http"
+
+pub fn org_name() -> string is
+    return "HackerOS-Linux-System"
+end
+
+pub struct RepoInfo is
+    pub name:            string
+    pub full_name:       string
+    pub description:     string
+    pub language:        string
+    pub html_url:        string
+    pub default_branch:  string
+    pub fork:             bool
+    pub archived:         bool
+end
+
+pub struct EntryInfo is
+    pub name:          string
+    pub path:          string
+    pub kind:          string   ;; "file" | "dir"
+    pub download_url:  string   ;; "" for directories
+end
+
+;; Up to the first 100 repositories in the org (see the module doc
+;; comment on pagination/rate limits). [] on any network or parse
+;; failure — a blank repo list is a recoverable, displayable state; a
+;; crash is not.
+pub fn list_org_repos() -> [RepoInfo] is
+    let url: string = "https://api.github.com/orgs/" + org_name() + "/repos?per_page=100"
+    let body: string = http::get(url)
+    let objs: [string] = gh_json::split_array_objects(body)
+
+    let mut result: [RepoInfo] = []
+    let mut i: int = 0
+    while i < objs.len() is
+        let o: string = objs[i]
+        result.push(RepoInfo {
+            name:            gh_json::get_str(o, "name"),
+            full_name:       gh_json::get_str(o, "full_name"),
+            description:     gh_json::get_str(o, "description"),
+            language:        gh_json::get_str(o, "language"),
+            html_url:        gh_json::get_str(o, "html_url"),
+            default_branch:  gh_json::get_str(o, "default_branch"),
+            fork:            gh_json::get_bool(o, "fork"),
+            archived:        gh_json::get_bool(o, "archived")
+        })
+        i += 1
+    end
+    return result
+end
+
+;; Directory listing (or, if `path_in_repo` names a file directly, a
+;; single-entry listing for it) at `path_in_repo` inside `full_name`
+;; (an "owner/repo" string, e.g. "HackerOS-Linux-System/tui").
+;; `path_in_repo` of "" means the repository root.
+pub fn list_contents(full_name: string, path_in_repo: string) -> [EntryInfo] is
+    let mut url: string = "https://api.github.com/repos/" + full_name + "/contents"
+    if path_in_repo != "" is url = url + "/" + path_in_repo end
+
+    let body: string = http::get(url)
+    let trimmed: string = leading_trim(body)
+    if trimmed == "" is return [] end
+
+    if trimmed[0..1] == "[" is
+        return entries_from(gh_json::split_array_objects(trimmed))
+    end
+    if trimmed[0..1] == "{" is
+        return entries_from([trimmed])
+    end
+    return []
+end
+
+fn entries_from(objs: [string]) -> [EntryInfo] is
+    let mut result: [EntryInfo] = []
+    let mut i: int = 0
+    while i < objs.len() is
+        let o: string = objs[i]
+        let dl: string = if gh_json::has_non_null(o, "download_url") then gh_json::get_str(o, "download_url") else ""
+        result.push(EntryInfo {
+            name:          gh_json::get_str(o, "name"),
+            path:          gh_json::get_str(o, "path"),
+            kind:          gh_json::get_str(o, "type"),
+            download_url:  dl
+        })
+        i += 1
+    end
+    return result
+end
+
+;; The raw text of a file, given the `download_url` an `EntryInfo`
+;; already carries (a plain `raw.githubusercontent.com` link — no
+;; further parsing needed, and no base64 decoding required the way
+;; reading the same file through the `content` field of the contents
+;; API response would need).
+pub fn fetch_raw(download_url: string) -> string is
+    if download_url == "" is return "" end
+    return http::get(download_url)
+end
+
+fn leading_trim(s: string) -> string is
+    let n: int = s.len()
+    let mut i: int = 0
+    while i < n && (s[i..i + 1] == " " || s[i..i + 1] == "\n" || s[i..i + 1] == "\t" || s[i..i + 1] == "\r") is
+        i += 1
+    end
+    return s[i..n]
+end
