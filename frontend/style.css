@@ -1,0 +1,24 @@
+body { background: #14141a; color: #d8d8e0; }
+
+.topbar { display: flex; flex-direction: row; padding: 12px; background: #1d1d26; }
+.brand { color: #8B0000; font-size: 20px; margin: 4px; }
+.crumb { color: #a0a0b0; margin: 4px; }
+
+.content { padding: 16px; }
+.msg { color: #d0a040; padding: 4px; }
+
+.list { display: block; }
+.card { display: block; background: #1d1d26; padding: 14px; margin: 8px; border: 1px; border-color: #2c2c3a; }
+.card-title { color: #ffffff; font-size: 18px; margin: 2px; }
+.card-desc { color: #9a9aac; margin: 2px; }
+
+.row { display: flex; flex-direction: row; background: #1a1a22; padding: 8px; margin: 3px; }
+.row-name { color: #e0e0ea; margin: 4px; }
+
+.lang-badge { color: #a0a0b0; margin: 4px; }
+
+.btn { padding: 10px; margin: 6px; background: #8B0000; color: #ffffff; }
+.small { padding: 6px; }
+
+.filebar { padding: 6px; }
+.code { display: block; background: #0e0e12; color: #d8d8e0; padding: 14px; margin: 8px; }
