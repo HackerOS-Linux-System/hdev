@@ -1,0 +1,253 @@
+use "std -> fs" from "fs"
+
+pub struct Buffer is
+    pub lines:      [string]
+    pub path:       string   ;; "" for an unsaved / untitled buffer
+    pub dirty:      bool
+    pub cursor_row: int
+    pub cursor_col: int      ;; measured in characters, not bytes
+    pub top:        int      ;; first visible line (for scrolling)
+end
+
+pub fn new_empty() -> Buffer is
+    return Buffer { lines: [""], path: "", dirty: false, cursor_row: 0, cursor_col: 0, top: 0 }
+end
+
+pub fn load(file_path: string) -> Buffer is
+    if !fs::exists(file_path) is
+        return Buffer { lines: [""], path: file_path, dirty: false, cursor_row: 0, cursor_col: 0, top: 0 }
+    end
+    let mut ls: [string] = fs::read_lines(file_path)
+    if ls.len() == 0 is ls = [""] end
+    return Buffer { lines: ls, path: file_path, dirty: false, cursor_row: 0, cursor_col: 0, top: 0 }
+end
+
+pub fn save_as(buf: Buffer, file_path: string) -> Buffer is
+    fs::write(file_path, join_lines(buf.lines))
+    return Buffer {
+        lines: buf.lines, path: file_path, dirty: false,
+        cursor_row: buf.cursor_row, cursor_col: buf.cursor_col, top: buf.top
+    }
+end
+
+pub fn save(buf: Buffer) -> Buffer is
+    if buf.path == "" is return buf end
+    return save_as(buf, buf.path)
+end
+
+pub fn line_count(buf: Buffer) -> int is
+    return buf.lines.len()
+end
+
+;; The buffer's full text, joined with "\n" — what gets written to disk
+;; by `save`/`save_as`, and what `history.h#` snapshots.
+pub fn content(buf: Buffer) -> string is
+    return join_lines(buf.lines)
+end
+
+pub fn current_line(buf: Buffer) -> string is
+    return buf.lines[buf.cursor_row]
+end
+
+;; ── editing ──────────────────────────────────────────────────────────
+
+pub fn insert_text(buf: Buffer, text: string) -> Buffer is
+    let line: string = buf.lines[buf.cursor_row]
+    let c: int = buf.cursor_col
+    let new_line: string = line[0..c] + text + line[c..char_count(line)]
+    let mut new_lines: [string] = replace_line(buf.lines, buf.cursor_row, new_line)
+    return with_cursor(with_lines(buf, new_lines), buf.cursor_row, c + char_count(text))
+end
+
+pub fn insert_newline(buf: Buffer) -> Buffer is
+    let line: string = buf.lines[buf.cursor_row]
+    let c: int = buf.cursor_col
+    let before: string = line[0..c]
+    let after: string = line[c..char_count(line)]
+
+    let mut new_lines: [string] = []
+    let mut i: int = 0
+    while i < buf.cursor_row is
+        new_lines.push(buf.lines[i])
+        i += 1
+    end
+    new_lines.push(before)
+    new_lines.push(after)
+    i = buf.cursor_row + 1
+    while i < buf.lines.len() is
+        new_lines.push(buf.lines[i])
+        i += 1
+    end
+    return with_cursor(with_lines(buf, new_lines), buf.cursor_row + 1, 0)
+end
+
+pub fn backspace(buf: Buffer) -> Buffer is
+    if buf.cursor_col > 0 is
+        let line: string = buf.lines[buf.cursor_row]
+        let c: int = buf.cursor_col
+        let new_line: string = line[0..c - 1] + line[c..char_count(line)]
+        return with_cursor(with_lines(buf, replace_line(buf.lines, buf.cursor_row, new_line)), buf.cursor_row, c - 1)
+    end
+    if buf.cursor_row > 0 is
+        let prev: string = buf.lines[buf.cursor_row - 1]
+        let cur: string = buf.lines[buf.cursor_row]
+        let merged: string = prev + cur
+        let new_col: int = char_count(prev)
+
+        let mut new_lines: [string] = []
+        let mut i: int = 0
+        while i < buf.cursor_row - 1 is
+            new_lines.push(buf.lines[i])
+            i += 1
+        end
+        new_lines.push(merged)
+        i = buf.cursor_row + 1
+        while i < buf.lines.len() is
+            new_lines.push(buf.lines[i])
+            i += 1
+        end
+        return with_cursor(with_lines(buf, new_lines), buf.cursor_row - 1, new_col)
+    end
+    return buf
+end
+
+pub fn delete_forward(buf: Buffer) -> Buffer is
+    let line: string = buf.lines[buf.cursor_row]
+    let n: int = char_count(line)
+    if buf.cursor_col < n is
+        let c: int = buf.cursor_col
+        let new_line: string = line[0..c] + line[c + 1..n]
+        return with_lines(buf, replace_line(buf.lines, buf.cursor_row, new_line))
+    end
+    if buf.cursor_row < buf.lines.len() - 1 is
+        return delete_forward_merge_next(buf)
+    end
+    return buf
+end
+
+fn delete_forward_merge_next(buf: Buffer) -> Buffer is
+    let cur: string = buf.lines[buf.cursor_row]
+    let next: string = buf.lines[buf.cursor_row + 1]
+    let merged: string = cur + next
+
+    let mut new_lines: [string] = []
+    let mut i: int = 0
+    while i < buf.cursor_row is
+        new_lines.push(buf.lines[i])
+        i += 1
+    end
+    new_lines.push(merged)
+    i = buf.cursor_row + 2
+    while i < buf.lines.len() is
+        new_lines.push(buf.lines[i])
+        i += 1
+    end
+    return with_lines(buf, new_lines)
+end
+
+;; ── cursor movement ──────────────────────────────────────────────────
+
+pub fn move_left(buf: Buffer) -> Buffer is
+    if buf.cursor_col > 0 is return with_cursor(buf, buf.cursor_row, buf.cursor_col - 1) end
+    if buf.cursor_row > 0 is
+        let prev_len: int = char_count(buf.lines[buf.cursor_row - 1])
+        return with_cursor(buf, buf.cursor_row - 1, prev_len)
+    end
+    return buf
+end
+
+pub fn move_right(buf: Buffer) -> Buffer is
+    let n: int = char_count(current_line(buf))
+    if buf.cursor_col < n is return with_cursor(buf, buf.cursor_row, buf.cursor_col + 1) end
+    if buf.cursor_row < buf.lines.len() - 1 is return with_cursor(buf, buf.cursor_row + 1, 0) end
+    return buf
+end
+
+pub fn move_up(buf: Buffer) -> Buffer is
+    if buf.cursor_row == 0 is return with_cursor(buf, 0, 0) end
+    let target_row: int = buf.cursor_row - 1
+    return with_cursor(buf, target_row, clampi(buf.cursor_col, 0, char_count(buf.lines[target_row])))
+end
+
+pub fn move_down(buf: Buffer) -> Buffer is
+    if buf.cursor_row >= buf.lines.len() - 1 is
+        return with_cursor(buf, buf.cursor_row, char_count(current_line(buf)))
+    end
+    let target_row: int = buf.cursor_row + 1
+    return with_cursor(buf, target_row, clampi(buf.cursor_col, 0, char_count(buf.lines[target_row])))
+end
+
+pub fn move_line_start(buf: Buffer) -> Buffer is
+    return with_cursor(buf, buf.cursor_row, 0)
+end
+
+pub fn move_line_end(buf: Buffer) -> Buffer is
+    return with_cursor(buf, buf.cursor_row, char_count(current_line(buf)))
+end
+
+;; Keep the cursor's row inside the [top, top + height) visible window,
+;; scrolling the minimum amount necessary. Call after every cursor move.
+pub fn scroll_into_view(buf: Buffer, height: int) -> Buffer is
+    let mut top: int = buf.top
+    if buf.cursor_row < top is top = buf.cursor_row end
+    if buf.cursor_row >= top + height is top = buf.cursor_row - height + 1 end
+    if top < 0 is top = 0 end
+    return Buffer {
+        lines: buf.lines, path: buf.path, dirty: buf.dirty,
+        cursor_row: buf.cursor_row, cursor_col: buf.cursor_col, top: top
+    }
+end
+
+;; ── small private helpers ────────────────────────────────────────────
+
+fn with_lines(buf: Buffer, new_lines: [string]) -> Buffer is
+    return Buffer {
+        lines: new_lines, path: buf.path, dirty: true,
+        cursor_row: buf.cursor_row, cursor_col: buf.cursor_col, top: buf.top
+    }
+end
+
+fn with_cursor(buf: Buffer, row: int, col: int) -> Buffer is
+    return Buffer {
+        lines: buf.lines, path: buf.path, dirty: buf.dirty,
+        cursor_row: row, cursor_col: col, top: buf.top
+    }
+end
+
+fn replace_line(lines: [string], idx: int, new_line: string) -> [string] is
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < lines.len() is
+        if i == idx is out.push(new_line) else is out.push(lines[i]) end
+        i += 1
+    end
+    return out
+end
+
+fn join_lines(lines: [string]) -> string is
+    let mut out: string = ""
+    let mut i: int = 0
+    while i < lines.len() is
+        out = out + lines[i]
+        if i < lines.len() - 1 is out = out + "\n" end
+        i += 1
+    end
+    return out
+end
+
+;; `s.len()` is the *byte* length; editing math needs the *character*
+;; count (see tui's own lib.h# for the same distinction and the same
+;; fix — H# strings slice by character but `.len()` counts bytes).
+fn char_count(s: string) -> int is
+    let mut i: int = 0
+    while s[i..i + 1] != "" is
+        i = i + 1
+    end
+    return i
+end
+
+fn clampi(n: int, lo: int, hi: int) -> int is
+    if n < lo is return lo end
+    if n > hi is return hi end
+    return n
+end
