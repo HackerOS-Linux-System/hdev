@@ -1,0 +1,90 @@
+use "bit -> git"   from "hgit"
+use "std -> fs"      from "fs"
+use "std -> path"    from "path"
+use "std -> env"     from "env"
+use "std -> strings" from "str"
+
+fn history_root() -> string is
+    return path::join(env::home(), ".local/share/hdev/history")
+end
+
+;; A filesystem-safe, collision-avoiding-enough name for a project's own
+;; corner of the history root — just enough character substitution that
+;; an absolute path becomes a single valid directory name.
+fn slug(project_root: string) -> string is
+    let mut out: string = str::replace_all(project_root, "/", "_")
+    out = str::replace_all(out, ":", "_")
+    out = str::replace_all(out, " ", "_")
+    return out
+end
+
+pub fn history_dir(project_root: string) -> string is
+    return path::join(history_root(), slug(project_root))
+end
+
+;; Make sure a history repo exists for this project, creating one on
+;; first use. Safe to call before every snapshot.
+pub fn ensure(project_root: string) -> bool is
+    let dir: string = history_dir(project_root)
+    if fs::exists(path::join(dir, ".git")) is return true end
+    fs::mkdir(dir)
+    match hgit::repository::init(dir, false) is
+        hgit::error::GitResult::Ok(_)  => return true
+        hgit::error::GitResult::Err(_) => return false
+    end
+end
+
+fn author() -> hgit::signature::Signature is
+    return hgit::signature::Signature::now("hdev", "hdev@localhost")
+end
+
+;; Copy `content` into the history repo at `rel_path` and commit it.
+;; Returns the short commit id, or "" if the snapshot couldn't be taken
+;; (history repos are best-effort — a failure here must never block a
+;; real save to the actual file, see tui_app.h#'s `do_save`).
+pub fn snapshot(project_root: string, rel_path: string, content: string, message: string) -> string is
+    if !ensure(project_root) is return "" end
+    let dir: string = history_dir(project_root)
+    let target: string = path::join(dir, rel_path)
+    let parent: string = path::parent(target)
+    if parent != "" is fs::mkdir(parent) end
+    fs::write(target, content)
+
+    match hgit::repository::open(dir) is
+        hgit::error::GitResult::Err(_) => return ""
+        hgit::error::GitResult::Ok(repo) => is
+            match hgit::porcelain::commit_all(repo, message, author()) is
+                hgit::error::GitResult::Ok(id)  => return id.short()
+                hgit::error::GitResult::Err(_)  => return ""
+            end
+        end
+    end
+end
+
+;; Most-recent-first, one-line-per-snapshot history for this project,
+;; capped at `limit` lines. Empty if there's no history repo yet, or it
+;; couldn't be read — never an error the caller has to unwrap.
+pub fn recent_log(project_root: string, limit: int) -> [string] is
+    let dir: string = history_dir(project_root)
+    if !fs::exists(path::join(dir, ".git")) is return [] end
+
+    match hgit::repository::open(dir) is
+        hgit::error::GitResult::Err(_) => return []
+        hgit::error::GitResult::Ok(repo) => is
+            match hgit::porcelain::log(repo) is
+                hgit::error::GitResult::Err(_)    => return []
+                hgit::error::GitResult::Ok(lines) => return take(lines, limit)
+            end
+        end
+    end
+end
+
+fn take(lines: [string], limit: int) -> [string] is
+    let mut out: [string] = []
+    let mut i: int = 0
+    while i < lines.len() && i < limit is
+        out.push(lines[i])
+        i += 1
+    end
+    return out
+end
